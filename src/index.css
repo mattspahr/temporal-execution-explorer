@@ -76,5 +76,5 @@
 }
 
 .gradient-text {
-  @apply bg-gradient-to-r from-temporal-purple via-temporal-blue to-temporal-green bg-clip-text text-transparent;
+  @apply text-temporal-purple;
 }

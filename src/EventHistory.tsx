@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, SkipForward, RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown } from "lucide-react";
+import { Play, SkipForward, RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown, Server } from "lucide-react";
 
 type SdkKey = "typescript" | "go" | "python" | "java";
 
@@ -188,16 +188,15 @@ function buildDisplayItems(events: EventItem[]): DisplayItem[] {
 
 const displayItems = buildDisplayItems(allEvents);
 
-// Crash display-item index: after ActivityTaskCompleted for chargeCard (event index 6, which is display item 4)
-// displayItems: [0]=WES, [1]=WFT group(1-3), [2]=ATS chargeCard, [3]=ATStarted chargeCard, [4]=ATCompleted chargeCard, [5]=WFT group(7-9), ...
-// We want crash after the chargeCard ATCompleted. Let's find it:
+// Crash display-item index: after ActivityTaskCompleted for reserveInventory
+// We want crash after the reserveInventory ATCompleted. Let's find it:
 const CRASH_DISPLAY_INDEX = displayItems.findIndex((item) => {
   if (item.kind === 'single') {
     const ev = allEvents[item.eventIndex];
-    return ev.name === "ActivityTaskCompleted" && ev.activity === "chargeCard";
+    return ev.name === "ActivityTaskCompleted" && ev.activity === "reserveInventory";
   }
   return false;
-}) + 1; // crash happens when trying to add the NEXT item after chargeCard completed
+}); // crash happens when trying to add the NEXT item after reserveInventory completed
 
 const getEventColor = (type: EventItem["type"]) => {
   switch (type) {
@@ -231,7 +230,7 @@ export const EventHistorySlide = () => {
   const replayChargeCardIndexRef = useRef(0);
 
   const activeCodeLines = sdkDefinitions[activeSDK].codeLines;
-  const chargeCardLineIndex = activeCodeLines.findIndex(item => item.activity === "chargeCard");
+  const replayStopLineIndex = activeCodeLines.findIndex(item => item.activity === "reserveInventory");
 
   const crashMode = true; // always on
 
@@ -291,11 +290,11 @@ export const EventHistorySlide = () => {
     setIsReplaying(true);
     setShowCallout(true);
     setReplayIndex(0);
-    replayChargeCardIndexRef.current = chargeCardLineIndex;
+    replayChargeCardIndexRef.current = replayStopLineIndex;
 
     setTimeout(() => setShowCallout(false), 3000);
 
-    const stopAt = chargeCardLineIndex;
+    const stopAt = replayStopLineIndex;
     let idx = 0;
     replayIntervalRef.current = setInterval(() => {
       setReplayIndex(idx);
@@ -307,8 +306,8 @@ export const EventHistorySlide = () => {
           setIsPlaying(true);
         }, 500);
       }
-    }, 150);
-  }, [chargeCardLineIndex]);
+    }, 300);
+  }, [replayStopLineIndex]);
 
   // Auto-play on mount with 600ms delay
   useEffect(() => {
@@ -320,16 +319,6 @@ export const EventHistorySlide = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Auto-trigger replay 2s after crash
-  useEffect(() => {
-    if (hasCrashed && !isReplaying) {
-      const timer = setTimeout(() => {
-        startReplay();
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [hasCrashed, isReplaying, startReplay]);
-
   // Playback interval
   useEffect(() => {
     if (!isPlaying) return;
@@ -339,7 +328,7 @@ export const EventHistorySlide = () => {
       if (!continued) {
         setIsPlaying(false);
       }
-    }, 400);
+    }, 800);
 
     return () => clearInterval(interval);
   }, [isPlaying, addNextEvent]);
@@ -379,13 +368,91 @@ export const EventHistorySlide = () => {
           </p>
         </div>
 
+        {/* Worker Status Strip */}
+        <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider mb-1 block">Your infrastructure</span>
+        <div className="flex items-center gap-3 mb-4">
+          {/* Worker 1 */}
+          <motion.div
+            animate={
+              hasCrashed
+                ? { opacity: 0.5 }
+                : { opacity: 1 }
+            }
+            transition={{ duration: 0.4 }}
+            className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border transition-colors duration-400 ${
+              hasCrashed
+                ? 'bg-secondary/50 border-slide-border'
+                : isPlaying
+                  ? 'bg-temporal-green/10 border-temporal-green/30'
+                  : 'bg-secondary/50 border-slide-border'
+            }`}
+          >
+            <Server className={`w-4 h-4 ${hasCrashed ? 'text-muted-foreground' : 'text-muted-foreground'}`} />
+            <span className={`text-sm font-medium ${hasCrashed ? 'text-muted-foreground' : 'text-foreground'}`}>
+              Worker 1
+            </span>
+            {hasCrashed ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-destructive/20 text-destructive border border-destructive/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
+                CRASHED
+              </span>
+            ) : isPlaying ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+                <motion.span
+                  className="w-1.5 h-1.5 rounded-full bg-temporal-green"
+                  animate={{ opacity: [1, 0.3, 1] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                />
+                RUNNING
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-slide-border">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
+                IDLE
+              </span>
+            )}
+          </motion.div>
+
+          {/* Worker 2 */}
+          <AnimatePresence>
+            {isReplaying && (
+              <motion.div
+                initial={{ opacity: 0, x: -20, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -20, scale: 0.95 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+                className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border ${
+                  completed
+                    ? 'bg-temporal-green/10 border-temporal-green/30'
+                    : 'bg-temporal-green/10 border-temporal-green/30'
+                }`}
+              >
+                <Server className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">Worker 2</span>
+                {completed ? (
+                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+                    <CheckCircle2 className="w-3 h-3" />
+                    COMPLETED
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+                    <motion.span
+                      className="w-1.5 h-1.5 rounded-full bg-temporal-green"
+                      animate={{ opacity: [1, 0.3, 1] }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    ACTIVE
+                  </span>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         {/* Two Column Layout */}
-        <div className="flex gap-4 h-[calc(100vh-280px)] min-h-[400px]">
+        <div className="flex gap-4 h-[calc(100vh-330px)] min-h-[400px]">
           {/* Left Column - Code (55%) */}
           <div className="w-[55%] flex flex-col">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider">Your infrastructure</span>
-            </div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
                 Workflow code {isReplaying && "(replayed)"}
@@ -394,7 +461,7 @@ export const EventHistorySlide = () => {
                 <motion.span
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="text-xs px-2 py-1 rounded bg-temporal-orange/20 text-temporal-orange border border-temporal-orange/30 font-mono"
+                  className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono"
                 >
                   REPLAYING
                 </motion.span>
@@ -405,7 +472,7 @@ export const EventHistorySlide = () => {
               {sdkOrder.map(sdk => (
                 <button
                   key={sdk}
-                  onClick={() => setActiveSDK(sdk)}
+                  onClick={() => { setActiveSDK(sdk); reset(); }}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     activeSDK === sdk
                       ? 'bg-primary text-primary-foreground'
@@ -430,20 +497,32 @@ export const EventHistorySlide = () => {
                   {activeCodeLines.map((item, idx) => {
                     const isHighlighted = item.activity && item.activity === highlightedActivity;
                     const isReplayingLine = isReplaying && replayIndex === idx;
-                    const showHistoryAnnotation = isReplaying && item.activity === "chargeCard" && replayIndex >= replayChargeCardIndexRef.current;
+                    const showHistoryAnnotation = isReplaying && item.activity === "reserveInventory" && replayIndex >= replayChargeCardIndexRef.current;
 
                     return (
                       <motion.div
                         key={idx}
                         className={`px-2 -mx-2 rounded relative transition-all duration-200 border-l-[3px] ${
                           isHighlighted
-                            ? 'bg-primary/30 border-primary'
+                            ? 'bg-primary/40 border-primary shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
                             : isReplayingLine
-                              ? 'bg-temporal-orange/20 border-temporal-orange'
+                              ? 'bg-red-500/30 border-red-500 shadow-[inset_0_0_20px_rgba(239,68,68,0.15)]'
                               : 'border-transparent'
                         }`}
-                        animate={isReplayingLine ? { backgroundColor: ["hsl(24 79% 56% / 0.15)", "hsl(24 79% 56% / 0.3)", "hsl(24 79% 56% / 0.15)"] } : { backgroundColor: "transparent" }}
-                        transition={isReplayingLine ? { duration: 0.4, repeat: Infinity } : { duration: 0.2 }}
+                        animate={
+                          isHighlighted
+                            ? { backgroundColor: ["hsl(263 70% 58% / 0.25)", "hsl(263 70% 58% / 0.45)", "hsl(263 70% 58% / 0.25)"] }
+                            : isReplayingLine
+                              ? { backgroundColor: ["hsl(0 84% 60% / 0.2)", "hsl(0 84% 60% / 0.4)", "hsl(0 84% 60% / 0.2)"] }
+                              : { backgroundColor: "transparent" }
+                        }
+                        transition={
+                          isHighlighted
+                            ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
+                            : isReplayingLine
+                              ? { duration: 0.4, repeat: Infinity }
+                              : { duration: 0.2 }
+                        }
                       >
                         <span className="text-muted-foreground/50 select-none inline-block w-6 text-right mr-4 text-xs">
                           {idx + 1}
@@ -691,6 +770,8 @@ export const EventHistorySlide = () => {
             disabled={!hasCrashed || isReplaying}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            animate={hasCrashed && !isReplaying ? { scale: [1, 1.05, 1], boxShadow: ["0 0 0px rgba(249,115,22,0)", "0 0 12px rgba(249,115,22,0.4)", "0 0 0px rgba(249,115,22,0)"] } : {}}
+            transition={hasCrashed && !isReplaying ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : {}}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-temporal-orange/20 text-temporal-orange border border-temporal-orange/30 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RefreshCw className="w-4 h-4" />
