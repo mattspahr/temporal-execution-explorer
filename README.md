@@ -2,7 +2,7 @@
 
 An interactive visualization that demonstrates how Temporal handles worker crashes and recovers using deterministic replay. Built for presentations, demos, and educational content about Temporal's execution model.
 
-https://github.com/user-attachments/assets/ff32209b-79b2-48e1-9a6c-efaa47cdd976
+https://github.com/user-attachments/assets/a5576322-7b2b-47fc-9154-67fec019c9ff
 
 ## What it shows
 
@@ -11,7 +11,7 @@ The app walks through a checkout workflow (charge card, reserve inventory, ship 
 - **Left panel (Your Infrastructure)** -- The workflow code running on a worker, shown in TypeScript, Go, Python, or Java via SDK tabs
 - **Right panel (Temporal Cloud)** -- The append-only Event History that Temporal persists
 
-During the demo, the worker crashes mid-execution after the first activity completes. A new worker picks up by replaying the Event History -- past activity results are loaded from history rather than re-executed, and only new work generates new events. The visualization highlights which code line is active and annotates replayed results.
+During the demo, the worker (application compute) crashes mid-execution after the first activity completes. A new worker picks up by replaying the Event History -- past activity results are loaded from history rather than re-executed, and only new work generates new events. The visualization highlights which code line is active and annotates replayed results.
 
 All data is static. There is no backend, no Temporal cluster, and no real workflow execution -- it's purely a UI for explaining the concepts.
 
