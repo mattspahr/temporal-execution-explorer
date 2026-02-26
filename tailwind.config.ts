@@ -15,6 +15,8 @@ export default {
   			'temporal-blue': '#6C9AFF',
   			'temporal-green': '#18B681',
   			'temporal-orange': '#E87B35',
+			'temporal-pink': '#E84593',
+			'temporal-amber': '#F59E0B',
   			'slide-border': 'hsl(var(--border))',
   			'slide-surface': 'hsl(var(--card))',
   			'slide-bg': 'hsl(var(--background))',

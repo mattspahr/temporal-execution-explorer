@@ -1,8 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, SkipForward, RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown, Server } from "lucide-react";
-import { type SdkKey, type SdkDefinition, type EventItem, sdkOrder, buildDisplayItems, getEventColor, highlightCode } from "@/lib/shared";
+import { Play, Pause, SkipForward, RotateCcw, CheckCircle2, ChevronRight, ChevronDown, Server } from "lucide-react";
+import {
+  type SdkKey,
+  type SdkDefinition,
+  type EventItem,
+  sdkOrder,
+  buildDisplayItems,
+  getEventColor,
+  highlightCode,
+} from "@/lib/shared";
 import { useStepper } from "@/lib/StepperContext";
+
+// --- SDK definitions with retry policy visible ---
 
 const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
   typescript: {
@@ -11,12 +21,13 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
     codeLines: [
       { line: "import { proxyActivities } from '@temporalio/workflow';", type: "import" },
       { line: "", type: "empty" },
-      { line: "const { chargeCard, reserveInventory, shipOrder } = proxyActivities<{", type: "const" },
-      { line: "  chargeCard(orderId: string): Promise<{ authId: string }>;", type: "type" },
-      { line: "  reserveInventory(orderId: string): Promise<void>;", type: "type" },
-      { line: "  shipOrder(orderId: string): Promise<void>;", type: "type" },
-      { line: "}>({", type: "const" },
+      { line: "const { chargeCard, reserveInventory, shipOrder } = proxyActivities<Activities>({", type: "const" },
       { line: "  startToCloseTimeout: '30 seconds',", type: "config" },
+      { line: "  retry: {", type: "config" },
+      { line: "    initialInterval: '1 second',", type: "config" },
+      { line: "    backoffCoefficient: 2,", type: "config" },
+      { line: "    maximumAttempts: 5,", type: "config" },
+      { line: "  },", type: "config" },
       { line: "});", type: "const" },
       { line: "", type: "empty" },
       { line: "export async function CheckoutWorkflow(orderId: string) {", type: "function" },
@@ -34,12 +45,18 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "package workflows", type: "keyword" },
       { line: "", type: "empty" },
       { line: "import (", type: "import" },
+      { line: '  "go.temporal.io/sdk/temporal"', type: "import" },
       { line: '  "go.temporal.io/sdk/workflow"', type: "import" },
       { line: ")", type: "import" },
       { line: "", type: "empty" },
       { line: "func CheckoutWorkflow(ctx workflow.Context, orderID string) error {", type: "function" },
       { line: "  opts := workflow.ActivityOptions{", type: "const" },
       { line: "    StartToCloseTimeout: 30 * time.Second,", type: "config" },
+      { line: "    RetryPolicy: &temporal.RetryPolicy{", type: "config" },
+      { line: "      InitialInterval:    time.Second,", type: "config" },
+      { line: "      BackoffCoefficient: 2,", type: "config" },
+      { line: "      MaximumAttempts:    5,", type: "config" },
+      { line: "    },", type: "config" },
       { line: "  }", type: "const" },
       { line: "  ctx = workflow.WithActivityOptions(ctx, opts)", type: "const" },
       { line: "", type: "empty" },
@@ -63,26 +80,35 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
     codeLines: [
       { line: "from datetime import timedelta", type: "import" },
       { line: "from temporalio import workflow", type: "import" },
+      { line: "from temporalio.common import RetryPolicy", type: "import" },
       { line: "", type: "empty" },
-      { line: "# Activity stubs with 30s timeout", type: "comment" },
       { line: "@workflow.defn", type: "decorator" },
       { line: "class CheckoutWorkflow:", type: "function" },
       { line: "", type: "empty" },
       { line: "  @workflow.run", type: "decorator" },
       { line: "  async def run(self, order_id: str) -> dict:", type: "function" },
+      { line: "    retry = RetryPolicy(", type: "config" },
+      { line: "      initial_interval=timedelta(seconds=1),", type: "config" },
+      { line: "      backoff_coefficient=2,", type: "config" },
+      { line: "      maximum_attempts=5,", type: "config" },
+      { line: "    )", type: "const" },
+      { line: "", type: "empty" },
       { line: "    payment = await workflow.execute_activity(", type: "await", activity: "chargeCard" },
       { line: "      charge_card, order_id,", type: "config" },
       { line: "      start_to_close_timeout=timedelta(seconds=30),", type: "config" },
+      { line: "      retry_policy=retry,", type: "config" },
       { line: "    )", type: "const" },
       { line: "", type: "empty" },
       { line: "    await workflow.execute_activity(", type: "await", activity: "reserveInventory" },
       { line: "      reserve_inventory, order_id,", type: "config" },
       { line: "      start_to_close_timeout=timedelta(seconds=30),", type: "config" },
+      { line: "      retry_policy=retry,", type: "config" },
       { line: "    )", type: "const" },
       { line: "", type: "empty" },
       { line: "    await workflow.execute_activity(", type: "await", activity: "shipOrder" },
       { line: "      ship_order, order_id,", type: "config" },
       { line: "      start_to_close_timeout=timedelta(seconds=30),", type: "config" },
+      { line: "      retry_policy=retry,", type: "config" },
       { line: "    )", type: "const" },
       { line: "", type: "empty" },
       { line: '    return {"status": "COMPLETED", "authId": payment["authId"]}', type: "return" },
@@ -93,6 +119,7 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
     filename: "CheckoutWorkflow.java",
     codeLines: [
       { line: "import io.temporal.activity.ActivityOptions;", type: "import" },
+      { line: "import io.temporal.common.RetryOptions;", type: "import" },
       { line: "import io.temporal.workflow.Workflow;", type: "import" },
       { line: "import java.time.Duration;", type: "import" },
       { line: "", type: "empty" },
@@ -102,6 +129,11 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "    Activities.class,", type: "config" },
       { line: "    ActivityOptions.newBuilder()", type: "config" },
       { line: "      .setStartToCloseTimeout(Duration.ofSeconds(30))", type: "config" },
+      { line: "      .setRetryOptions(RetryOptions.newBuilder()", type: "config" },
+      { line: "        .setInitialInterval(Duration.ofSeconds(1))", type: "config" },
+      { line: "        .setBackoffCoefficient(2)", type: "config" },
+      { line: "        .setMaximumAttempts(5)", type: "config" },
+      { line: "        .build())", type: "config" },
       { line: "      .build());", type: "config" },
       { line: "", type: "empty" },
       { line: "  @Override", type: "decorator" },
@@ -116,97 +148,136 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
   },
 };
 
+// --- Event history for retry scenario ---
+
 const allEvents: EventItem[] = [
   { id: 1, name: "WorkflowExecutionStarted", type: "Workflow", timestamp: "00:00:00.000" },
   { id: 2, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:00.001" },
   { id: 3, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:00.012" },
   { id: 4, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:00.014" },
   { id: 5, name: "ActivityTaskScheduled", activity: "chargeCard", type: "Activity", timestamp: "00:00:00.015" },
-  { id: 6, name: "ActivityTaskStarted", activity: "chargeCard", type: "Activity", timestamp: "00:00:00.045" },
-  { id: 7, name: "ActivityTaskCompleted", activity: "chargeCard", type: "Activity", timestamp: "00:00:00.892" },
-  { id: 8, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:00.893" },
-  { id: 9, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:00.901" },
-  { id: 10, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:00.904" },
-  { id: 11, name: "ActivityTaskScheduled", activity: "reserveInventory", type: "Activity", timestamp: "00:00:00.905" },
-  { id: 12, name: "ActivityTaskStarted", activity: "reserveInventory", type: "Activity", timestamp: "00:00:00.932" },
-  { id: 13, name: "ActivityTaskCompleted", activity: "reserveInventory", type: "Activity", timestamp: "00:00:01.156" },
-  { id: 14, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:01.157" },
-  { id: 15, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:01.165" },
-  { id: 16, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:01.167" },
-  { id: 17, name: "ActivityTaskScheduled", activity: "shipOrder", type: "Activity", timestamp: "00:00:01.168" },
-  { id: 18, name: "ActivityTaskStarted", activity: "shipOrder", type: "Activity", timestamp: "00:00:01.201" },
-  { id: 19, name: "ActivityTaskCompleted", activity: "shipOrder", type: "Activity", timestamp: "00:00:02.445" },
-  { id: 20, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:02.446" },
-  { id: 21, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:02.447" },
-  { id: 22, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:02.448" },
-  { id: 23, name: "WorkflowExecutionCompleted", type: "Workflow", timestamp: "00:00:02.449" },
+  { id: 6, name: "ActivityTaskStarted", activity: "chargeCard", type: "Activity", timestamp: "00:00:00.045", attempt: 1 },
+  { id: 7, name: "ActivityTaskFailed", activity: "chargeCard", type: "ActivityFailed", timestamp: "00:00:00.892", errorMessage: "Payment gateway timeout", attempt: 1 },
+  { id: 8, name: "ActivityTaskStarted", activity: "chargeCard", type: "Activity", timestamp: "00:00:01.893", attempt: 2 },
+  { id: 9, name: "ActivityTaskFailed", activity: "chargeCard", type: "ActivityFailed", timestamp: "00:00:02.401", errorMessage: "Payment gateway timeout", attempt: 2 },
+  { id: 10, name: "ActivityTaskStarted", activity: "chargeCard", type: "Activity", timestamp: "00:00:04.402", attempt: 3 },
+  { id: 11, name: "ActivityTaskCompleted", activity: "chargeCard", type: "Activity", timestamp: "00:00:05.120" },
+  { id: 12, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:05.121" },
+  { id: 13, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:05.130" },
+  { id: 14, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:05.132" },
+  { id: 15, name: "ActivityTaskScheduled", activity: "reserveInventory", type: "Activity", timestamp: "00:00:05.133" },
+  { id: 16, name: "ActivityTaskStarted", activity: "reserveInventory", type: "Activity", timestamp: "00:00:05.160" },
+  { id: 17, name: "ActivityTaskCompleted", activity: "reserveInventory", type: "Activity", timestamp: "00:00:05.390" },
+  { id: 18, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:05.391" },
+  { id: 19, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:05.399" },
+  { id: 20, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:05.401" },
+  { id: 21, name: "ActivityTaskScheduled", activity: "shipOrder", type: "Activity", timestamp: "00:00:05.402" },
+  { id: 22, name: "ActivityTaskStarted", activity: "shipOrder", type: "Activity", timestamp: "00:00:05.430" },
+  { id: 23, name: "ActivityTaskCompleted", activity: "shipOrder", type: "Activity", timestamp: "00:00:06.680" },
+  { id: 24, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:06.681" },
+  { id: 25, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:06.690" },
+  { id: 26, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:06.692" },
+  { id: 27, name: "WorkflowExecutionCompleted", type: "Workflow", timestamp: "00:00:06.693" },
 ];
 
 const displayItems = buildDisplayItems(allEvents);
 
-// Crash display-item index: after ActivityTaskCompleted for reserveInventory
-// We want crash after the reserveInventory ATCompleted. Let's find it:
-const CRASH_DISPLAY_INDEX = displayItems.findIndex((item) => {
+// --- Failure display indices (for chargeCard attempt 1 & 2 failures) ---
+
+const FAILURE_1_INDEX = displayItems.findIndex((item) => {
   if (item.kind === 'single') {
     const ev = allEvents[item.eventIndex];
-    return ev.name === "ActivityTaskCompleted" && ev.activity === "reserveInventory";
+    return ev.name === "ActivityTaskFailed" && ev.attempt === 1;
   }
   return false;
-}); // crash happens when trying to add the NEXT item after reserveInventory completed
+});
 
-const getHighlightedLine = (eventIndex: number): string | null => {
-  const event = allEvents[eventIndex];
-  if (!event) return null;
-  return event.activity || null;
-};
+const FAILURE_2_INDEX = displayItems.findIndex((item) => {
+  if (item.kind === 'single') {
+    const ev = allEvents[item.eventIndex];
+    return ev.name === "ActivityTaskFailed" && ev.attempt === 2;
+  }
+  return false;
+});
 
-export const EventHistorySlide = () => {
+const SUCCESS_INDEX = displayItems.findIndex((item) => {
+  if (item.kind === 'single') {
+    const ev = allEvents[item.eventIndex];
+    return ev.name === "ActivityTaskCompleted" && ev.activity === "chargeCard";
+  }
+  return false;
+});
+
+// --- Component ---
+
+export const ActivityRetriesSlide = () => {
   const { markVisited, markCompleted } = useStepper();
   const [activeSDK, setActiveSDK] = useState<SdkKey>("typescript");
   const [visibleEvents, setVisibleEvents] = useState<number[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [hasCrashed, setHasCrashed] = useState(false);
-  const [isReplaying, setIsReplaying] = useState(false);
-  const [replayIndex, setReplayIndex] = useState(0);
-  const [showCallout, setShowCallout] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [displayItemCursor, setDisplayItemCursor] = useState(0);
 
-  const [isReplayScanning, setIsReplayScanning] = useState(false);
+  // Retry-specific state
+  const [retryPaused, setRetryPaused] = useState(false);
+  const [currentAttempt, setCurrentAttempt] = useState<number | null>(null);
+  const [backoffSeconds, setBackoffSeconds] = useState(0);
+  const [backoffCountdown, setBackoffCountdown] = useState(0);
+  const [showRetryCallout, setShowRetryCallout] = useState(false);
+  const [showSuccessCallout, setShowSuccessCallout] = useState(false);
+  const [failedLineFlash, setFailedLineFlash] = useState(false);
+  const [successLineFlash, setSuccessLineFlash] = useState(false);
 
   const hasAutoPlayed = useRef(false);
-  const replayChargeCardIndexRef = useRef(0);
+  const backoffTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeCodeLines = sdkDefinitions[activeSDK].codeLines;
-  const replayStopLineIndex = activeCodeLines.findIndex(item => item.activity === "reserveInventory");
-
-  const crashMode = true; // always on
+  const chargeCardLineIndex = activeCodeLines.findIndex(item => item.activity === "chargeCard");
 
   const reset = useCallback(() => {
-    setIsReplayScanning(false);
+    if (backoffTimerRef.current) {
+      clearInterval(backoffTimerRef.current);
+      backoffTimerRef.current = null;
+    }
     setVisibleEvents([]);
     setSelectedEvent(null);
     setIsPlaying(false);
-    setHasCrashed(false);
-    setIsReplaying(false);
-    setReplayIndex(0);
-    setShowCallout(false);
     setCompleted(false);
     setExpandedGroups(new Set());
     setDisplayItemCursor(0);
+    setRetryPaused(false);
+    setCurrentAttempt(null);
+    setBackoffSeconds(0);
+    setBackoffCountdown(0);
+    setShowRetryCallout(false);
+    setShowSuccessCallout(false);
+    setFailedLineFlash(false);
+    setSuccessLineFlash(false);
     hasAutoPlayed.current = false;
   }, []);
 
-  const addNextEvent = useCallback(() => {
-    const nextDisplayIdx = displayItemCursor;
+  const startBackoffCountdown = useCallback((seconds: number) => {
+    setBackoffCountdown(seconds);
+    const startTime = Date.now();
+    backoffTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const remaining = Math.max(0, seconds - elapsed);
+      setBackoffCountdown(remaining);
+      if (remaining <= 0) {
+        clearInterval(backoffTimerRef.current!);
+        backoffTimerRef.current = null;
+        setRetryPaused(false);
+        setFailedLineFlash(false);
+        setBackoffCountdown(0);
+        setIsPlaying(true);
+      }
+    }, 50);
+  }, []);
 
-    if (crashMode && nextDisplayIdx === CRASH_DISPLAY_INDEX && !hasCrashed) {
-      setHasCrashed(true);
-      setIsPlaying(false);
-      return false;
-    }
+  const addNextEvent = useCallback((stepMode = false) => {
+    const nextDisplayIdx = displayItemCursor;
 
     if (nextDisplayIdx < displayItems.length) {
       const item = displayItems[nextDisplayIdx];
@@ -223,6 +294,40 @@ export const EventHistorySlide = () => {
       setSelectedEvent(lastEventIndex);
       setDisplayItemCursor(nextDisplayIdx + 1);
 
+      // Check if this is a failure event — always show retry UI
+      if (nextDisplayIdx === FAILURE_1_INDEX) {
+        setRetryPaused(true);
+        setIsPlaying(false);
+        setCurrentAttempt(1);
+        setFailedLineFlash(true);
+        setShowRetryCallout(true);
+        setBackoffSeconds(1);
+        if (!stepMode) startBackoffCountdown(1);
+        return false;
+      }
+
+      if (nextDisplayIdx === FAILURE_2_INDEX) {
+        setRetryPaused(true);
+        setIsPlaying(false);
+        setCurrentAttempt(2);
+        setFailedLineFlash(true);
+        setBackoffSeconds(2);
+        if (!stepMode) startBackoffCountdown(2);
+        return false;
+      }
+
+      // Check if chargeCard succeeded
+      if (nextDisplayIdx === SUCCESS_INDEX) {
+        setCurrentAttempt(null);
+        setSuccessLineFlash(true);
+        setShowRetryCallout(false);
+        setShowSuccessCallout(true);
+        setTimeout(() => {
+          setSuccessLineFlash(false);
+          setShowSuccessCallout(false);
+        }, 2000);
+      }
+
       if (nextDisplayIdx === displayItems.length - 1) {
         setCompleted(true);
         setIsPlaying(false);
@@ -231,21 +336,12 @@ export const EventHistorySlide = () => {
       return true;
     }
     return false;
-  }, [displayItemCursor, crashMode, hasCrashed]);
+  }, [displayItemCursor, startBackoffCountdown]);
 
-  const startReplay = useCallback(() => {
-    setIsReplaying(true);
-    setShowCallout(true);
-    setReplayIndex(0);
-    replayChargeCardIndexRef.current = replayStopLineIndex;
-    setTimeout(() => setShowCallout(false), 3000);
-    setIsReplayScanning(true);
-  }, [replayStopLineIndex]);
+  useEffect(() => { markVisited("activity-retries"); }, [markVisited]);
+  useEffect(() => { if (completed) markCompleted("activity-retries"); }, [completed, markCompleted]);
 
-  useEffect(() => { markVisited("crash-recovery"); }, [markVisited]);
-  useEffect(() => { if (completed) markCompleted("crash-recovery"); }, [completed, markCompleted]);
-
-  // Auto-play on mount with 600ms delay
+  // Auto-play on mount
   useEffect(() => {
     if (hasAutoPlayed.current) return;
     hasAutoPlayed.current = true;
@@ -269,31 +365,8 @@ export const EventHistorySlide = () => {
     return () => clearInterval(interval);
   }, [isPlaying, addNextEvent]);
 
-  // Replay scanning interval
-  useEffect(() => {
-    if (!isReplayScanning) return;
-    const interval = setInterval(() => {
-      setReplayIndex(prev => prev + 1);
-    }, 300);
-    return () => clearInterval(interval);
-  }, [isReplayScanning]);
-
-  // Replay scan completion
-  useEffect(() => {
-    if (isReplayScanning && replayIndex > replayStopLineIndex) {
-      setIsReplayScanning(false);
-      setTimeout(() => setIsPlaying(true), 500);
-    }
-  }, [isReplayScanning, replayIndex, replayStopLineIndex]);
-
-  const isAnythingPlaying = isPlaying || isReplayScanning;
-
-  const highlightedActivity = selectedEvent !== null ? getHighlightedLine(selectedEvent) : null;
-  // Crash overlay: show when crashed and the visible events match the pre-crash count
-  const crashEventCount = displayItems.slice(0, CRASH_DISPLAY_INDEX).reduce((sum, item) => {
-    return sum + (item.kind === 'single' ? 1 : item.eventIndices.length);
-  }, 0);
-  const showCrashOverlay = hasCrashed && !isReplaying && visibleEvents.length === crashEventCount;
+  const highlightedActivity = selectedEvent !== null ? allEvents[selectedEvent]?.activity || null : null;
+  const visibleSet = new Set(visibleEvents);
 
   const toggleGroup = (displayIdx: number) => {
     setExpandedGroups(prev => {
@@ -307,51 +380,37 @@ export const EventHistorySlide = () => {
     });
   };
 
-  // Build the set of visible event indices for quick lookup
-  const visibleSet = new Set(visibleEvents);
-
   return (
     <div className="slide-content !px-8 !pt-6">
       <div className="w-full max-w-7xl flex flex-col h-full">
         {/* Header */}
         <div className="text-center mb-6">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-2">
-            What happens when your server <span className="gradient-text">crashes mid-checkout</span>?
+            What happens when an API is <span className="gradient-text">flaky</span>?
           </h2>
           <p className="text-muted-foreground text-base max-w-2xl mx-auto">
-            Temporal records every step. When a worker dies, a new one picks up exactly where it left off.
+            Temporal retries failed activities with exponential backoff by default.
           </p>
         </div>
 
         {/* Worker Status Strip */}
         <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider mb-1 block">Your infrastructure</span>
         <div className="flex items-center gap-3 mb-4">
-          {/* Worker 1 */}
           <motion.div
-            animate={
-              hasCrashed
-                ? { opacity: 0.5 }
-                : { opacity: 1 }
-            }
-            transition={{ duration: 0.4 }}
             className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border transition-colors duration-400 ${
-              hasCrashed
-                ? 'bg-secondary/50 border-slide-border'
-                : isPlaying
-                  ? 'bg-temporal-green/10 border-temporal-green/30'
-                  : 'bg-secondary/50 border-slide-border'
+              visibleEvents.length > 0 && !completed
+                ? 'bg-temporal-green/10 border-temporal-green/30'
+                : 'bg-secondary/50 border-slide-border'
             }`}
           >
-            <Server className={`w-4 h-4 ${hasCrashed ? 'text-muted-foreground' : 'text-muted-foreground'}`} />
-            <span className={`text-sm font-medium ${hasCrashed ? 'text-muted-foreground' : 'text-foreground'}`}>
-              Worker 1
-            </span>
-            {hasCrashed ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-destructive/20 text-destructive border border-destructive/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
-                CRASHED
+            <Server className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Worker 1</span>
+            {completed ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+                <CheckCircle2 className="w-3 h-3" />
+                COMPLETED
               </span>
-            ) : isPlaying ? (
+            ) : visibleEvents.length > 0 ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
                 <motion.span
                   className="w-1.5 h-1.5 rounded-full bg-temporal-green"
@@ -368,35 +427,23 @@ export const EventHistorySlide = () => {
             )}
           </motion.div>
 
-          {/* Worker 2 */}
+          {/* Attempt badge */}
           <AnimatePresence>
-            {isReplaying && (
+            {currentAttempt !== null && (
               <motion.div
-                initial={{ opacity: 0, x: -20, scale: 0.95 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: -20, scale: 0.95 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border ${
-                  completed
-                    ? 'bg-temporal-green/10 border-temporal-green/30'
-                    : 'bg-temporal-green/10 border-temporal-green/30'
-                }`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-temporal-orange/10 border border-temporal-orange/30"
               >
-                <Server className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">Worker 2</span>
-                {completed ? (
-                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
-                    <CheckCircle2 className="w-3 h-3" />
-                    COMPLETED
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
-                    <motion.span
-                      className="w-1.5 h-1.5 rounded-full bg-temporal-green"
-                      animate={{ opacity: [1, 0.3, 1] }}
-                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                    ACTIVE
+                <span className="text-xs font-semibold text-temporal-orange">
+                  Attempt {currentAttempt} of 5
+                </span>
+                {retryPaused && backoffSeconds > 0 && (
+                  <span className="text-xs text-temporal-orange/70 font-mono">
+                    {backoffCountdown > 0
+                      ? `retry in ${backoffCountdown.toFixed(1)}s`
+                      : `backoff: ${backoffSeconds}s`}
                   </span>
                 )}
               </motion.div>
@@ -410,17 +457,8 @@ export const EventHistorySlide = () => {
           <div className="w-[55%] flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
-                Workflow code {isReplaying && "(replayed)"}
+                Workflow code
               </span>
-              {isReplaying && (
-                <motion.span
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono"
-                >
-                  REPLAYING
-                </motion.span>
-              )}
             </div>
 
             <div className="flex items-center gap-1 mb-2">
@@ -450,88 +488,113 @@ export const EventHistorySlide = () => {
               <pre className="mt-8 text-sm leading-relaxed">
                 <code>
                   {activeCodeLines.map((item, idx) => {
-                    const isHighlighted = item.activity && item.activity === highlightedActivity;
-                    const isReplayingLine = isReplaying && replayIndex === idx;
-                    const showHistoryAnnotation = isReplaying && item.activity === "reserveInventory" && replayIndex >= replayChargeCardIndexRef.current;
+                    const isHighlighted = item.activity && item.activity === highlightedActivity && !failedLineFlash && !successLineFlash;
+                    const isFailFlash = failedLineFlash && idx === chargeCardLineIndex;
+                    const isSuccessFlash = successLineFlash && idx === chargeCardLineIndex;
 
                     return (
                       <motion.div
                         key={idx}
                         className={`px-2 -mx-2 rounded relative transition-all duration-200 border-l-[3px] ${
-                          isHighlighted
-                            ? 'bg-primary/40 border-primary shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
-                            : isReplayingLine
-                              ? 'bg-red-500/30 border-red-500 shadow-[inset_0_0_20px_rgba(239,68,68,0.15)]'
-                              : 'border-transparent'
+                          isFailFlash
+                            ? 'bg-destructive/30 border-destructive shadow-[inset_0_0_20px_rgba(239,68,68,0.15)]'
+                            : isSuccessFlash
+                              ? 'bg-temporal-green/30 border-temporal-green shadow-[inset_0_0_20px_rgba(24,182,129,0.15)]'
+                              : isHighlighted
+                                ? 'bg-primary/40 border-primary shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
+                                : 'border-transparent'
                         }`}
                         animate={
-                          isHighlighted
-                            ? { backgroundColor: ["hsl(263 70% 58% / 0.25)", "hsl(263 70% 58% / 0.45)", "hsl(263 70% 58% / 0.25)"] }
-                            : isReplayingLine
-                              ? { backgroundColor: ["hsl(0 84% 60% / 0.2)", "hsl(0 84% 60% / 0.4)", "hsl(0 84% 60% / 0.2)"] }
-                              : { backgroundColor: "transparent" }
+                          isFailFlash
+                            ? { backgroundColor: ["hsl(0 84% 60% / 0.2)", "hsl(0 84% 60% / 0.4)", "hsl(0 84% 60% / 0.2)"] }
+                            : isSuccessFlash
+                              ? { backgroundColor: ["hsl(160 78% 39% / 0.2)", "hsl(160 78% 39% / 0.5)", "hsl(160 78% 39% / 0.2)"] }
+                              : isHighlighted
+                                ? { backgroundColor: ["hsl(263 70% 58% / 0.25)", "hsl(263 70% 58% / 0.45)", "hsl(263 70% 58% / 0.25)"] }
+                                : { backgroundColor: "transparent" }
                         }
                         transition={
-                          isHighlighted
-                            ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
-                            : isReplayingLine
-                              ? { duration: 0.4, repeat: Infinity }
-                              : { duration: 0.2 }
+                          isFailFlash
+                            ? { duration: 0.6, repeat: Infinity, ease: "easeInOut" }
+                            : isSuccessFlash
+                              ? { duration: 0.8, repeat: Infinity, ease: "easeInOut" }
+                              : isHighlighted
+                                ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
+                                : { duration: 0.2 }
                         }
                       >
                         <span className="text-muted-foreground/50 select-none inline-block w-6 text-right mr-4 text-xs">
                           {idx + 1}
                         </span>
                         {highlightCode(item.line, activeSDK)}
-
-                        {showHistoryAnnotation && (
-                          <motion.span
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-0.5 rounded bg-temporal-blue/20 text-temporal-blue"
-                          >
-                            Result loaded from history
-                          </motion.span>
-                        )}
                       </motion.div>
                     );
                   })}
                 </code>
               </pre>
-
-              {/* Crash overlay */}
-              {showCrashOverlay && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="absolute bottom-20 left-4 right-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3"
-                >
-                  <AlertTriangle className="w-5 h-5 text-destructive" />
-                  <span className="text-sm text-destructive">
-                    Worker crashed before next Workflow Task completed
-                  </span>
-                </motion.div>
-              )}
             </div>
           </div>
 
-          {/* Center Divider */}
+          {/* Center Divider with Callouts */}
           <div className="w-px bg-slide-border relative">
-            {/* Floating Callout */}
+            {/* Retry Policy Callout */}
             <AnimatePresence>
-              {showCallout && (
+              {showRetryCallout && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-primary/30 shadow-xl"
+                  className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-temporal-orange/30 shadow-xl"
                 >
-                  <h4 className="font-semibold text-primary mb-2 text-center">Deterministic Replay</h4>
-                  <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>Re-executes workflow code</li>
-                    <li>Past results come from Event History</li>
-                    <li>Only new decisions append new events</li>
-                  </ul>
+                  <h4 className="font-semibold text-temporal-orange mb-3 text-center text-sm">Retry Policy</h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">initialInterval</span>
+                      <span className="font-mono text-foreground">1s</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">backoffCoefficient</span>
+                      <span className="font-mono text-foreground">2</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">maximumAttempts</span>
+                      <span className="font-mono text-foreground">5</span>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slide-border">
+                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <span>1s</span>
+                        <span className="text-foreground">&rarr;</span>
+                        <span>2s</span>
+                        <span className="text-foreground">&rarr;</span>
+                        <span>4s</span>
+                        <span className="text-foreground">&rarr;</span>
+                        <span>8s</span>
+                        <span className="text-foreground">&rarr;</span>
+                        <span>16s</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/60 mt-1 block">Exponential backoff schedule</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Success Callout */}
+            <AnimatePresence>
+              {showSuccessCallout && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-56 p-4 rounded-xl bg-slide-surface border border-temporal-green/30 shadow-xl"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <CheckCircle2 className="w-5 h-5 text-temporal-green" />
+                    <h4 className="font-semibold text-temporal-green text-sm">Activity recovered!</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    chargeCard succeeded on attempt 3. Workflow continues.
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -572,29 +635,52 @@ export const EventHistorySlide = () => {
                         if (!visibleSet.has(eventIdx)) return null;
                         const event = allEvents[eventIdx];
                         const isSelected = selectedEvent === eventIdx;
+                        const isFailed = event.type === "ActivityFailed";
 
                         return (
                           <motion.div
                             key={event.id}
                             initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            animate={{
+                              opacity: 1,
+                              y: 0,
+                              ...(isFailed ? {
+                                backgroundColor: ["hsl(0 62.8% 50% / 0.1)", "hsl(0 62.8% 50% / 0.25)", "hsl(0 62.8% 50% / 0.1)"]
+                              } : {})
+                            }}
+                            transition={isFailed ? { backgroundColor: { duration: 1, repeat: 2, ease: "easeInOut" } } : undefined}
                             onClick={() => setSelectedEvent(eventIdx)}
                             className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-xs ${
                               isSelected
-                                ? 'bg-primary/10 border border-primary/30'
-                                : 'hover:bg-secondary/50 border border-transparent'
+                                ? isFailed
+                                  ? 'bg-destructive/15 border border-destructive/40'
+                                  : 'bg-primary/10 border border-primary/30'
+                                : isFailed
+                                  ? 'bg-destructive/5 border border-destructive/20'
+                                  : 'hover:bg-secondary/50 border border-transparent'
                             }`}
                           >
-                            <span className="w-5 h-5 flex items-center justify-center rounded bg-secondary text-muted-foreground font-mono text-[10px]">
+                            <span className={`w-5 h-5 flex items-center justify-center rounded font-mono text-[10px] ${
+                              isFailed ? 'bg-destructive/20 text-destructive' : 'bg-secondary text-muted-foreground'
+                            }`}>
                               {event.id}
                             </span>
                             <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getEventColor(event.type)}`}>
-                              {event.type}
+                              {event.type === "ActivityFailed" ? "Activity" : event.type}
                             </span>
-                            <span className="flex-1 font-mono text-foreground truncate">
+                            <span className={`flex-1 font-mono truncate ${isFailed ? 'text-destructive' : 'text-foreground'}`}>
                               {event.name}
-                              {event.activity && <span className="text-muted-foreground"> ({event.activity})</span>}
+                              {event.activity && <span className={isFailed ? "text-destructive/70" : "text-muted-foreground"}> ({event.activity})</span>}
                             </span>
+                            {event.attempt && (
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                isFailed
+                                  ? 'bg-destructive/20 text-destructive border border-destructive/30'
+                                  : 'bg-temporal-green/20 text-temporal-green border border-temporal-green/30'
+                              }`}>
+                                #{event.attempt}
+                              </span>
+                            )}
                             <span className="text-muted-foreground/60 font-mono text-[10px]">
                               {event.timestamp}
                             </span>
@@ -635,7 +721,6 @@ export const EventHistorySlide = () => {
                               </span>
                             </motion.div>
 
-                            {/* Expanded individual events */}
                             <AnimatePresence>
                               {isExpanded && displayItem.eventIndices.map(eventIdx => {
                                 const event = allEvents[eventIdx];
@@ -678,18 +763,47 @@ export const EventHistorySlide = () => {
                 )}
               </div>
 
-              {/* Crash note */}
-              {showCrashOverlay && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-3 border-t border-slide-border bg-slide-bg/50"
-                >
-                  <p className="text-xs text-muted-foreground italic">
-                    History is persisted. A new worker can replay.
-                  </p>
-                </motion.div>
-              )}
+              {/* Backoff info */}
+              <AnimatePresence>
+                {retryPaused && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="p-3 border-t border-slide-border bg-slide-bg/50"
+                  >
+                    {backoffCountdown > 0 ? (
+                      <>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-temporal-orange font-medium">
+                            Backoff: waiting {backoffSeconds}s before retry
+                          </span>
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {backoffCountdown.toFixed(1)}s
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                          <motion.div
+                            className="h-full bg-temporal-orange rounded-full"
+                            initial={{ width: "100%" }}
+                            animate={{ width: "0%" }}
+                            transition={{ duration: backoffSeconds, ease: "linear" }}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-temporal-orange font-medium">
+                          Temporal waits {backoffSeconds}s before retry (exponential backoff)
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Press Step or Play to continue
+                        </span>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -700,47 +814,48 @@ export const EventHistorySlide = () => {
             onClick={() => {
               if (isPlaying) {
                 setIsPlaying(false);
-              } else if (isReplayScanning) {
-                setIsReplayScanning(false);
-              } else if (isReplaying && replayIndex <= replayStopLineIndex) {
-                setIsReplayScanning(true);
               } else {
+                if (retryPaused) {
+                  if (backoffTimerRef.current) {
+                    clearInterval(backoffTimerRef.current);
+                    backoffTimerRef.current = null;
+                  }
+                  setRetryPaused(false);
+                  setFailedLineFlash(false);
+                  setBackoffCountdown(0);
+                }
                 setIsPlaying(true);
               }
             }}
-            disabled={completed || (hasCrashed && !isReplaying)}
+            disabled={completed}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isAnythingPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            {isAnythingPlaying ? "Pause" : "Play"}
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isPlaying ? "Pause" : "Play"}
           </motion.button>
 
           <motion.button
-            onClick={addNextEvent}
-            disabled={isAnythingPlaying || completed || (hasCrashed && !isReplaying)}
+            onClick={() => {
+              if (retryPaused) {
+                if (backoffTimerRef.current) {
+                  clearInterval(backoffTimerRef.current);
+                  backoffTimerRef.current = null;
+                }
+                setRetryPaused(false);
+                setFailedLineFlash(false);
+                setBackoffCountdown(0);
+              }
+              addNextEvent(true);
+            }}
+            disabled={isPlaying || completed}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <SkipForward className="w-4 h-4" />
             Step
-          </motion.button>
-
-          <div className="w-px h-6 bg-slide-border mx-2" />
-
-          <motion.button
-            onClick={startReplay}
-            disabled={!hasCrashed || isReplaying}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            animate={hasCrashed && !isReplaying ? { scale: [1, 1.05, 1], boxShadow: ["0 0 0px rgba(249,115,22,0)", "0 0 12px rgba(249,115,22,0.4)", "0 0 0px rgba(249,115,22,0)"] } : {}}
-            transition={hasCrashed && !isReplaying ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : {}}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-temporal-orange/20 text-temporal-orange border border-temporal-orange/30 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Replay on New Worker
           </motion.button>
 
           <div className="w-px h-6 bg-slide-border mx-2" />
@@ -759,4 +874,3 @@ export const EventHistorySlide = () => {
     </div>
   );
 };
-

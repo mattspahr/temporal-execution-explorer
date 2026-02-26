@@ -1,26 +1,35 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, SkipForward, RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown, Server } from "lucide-react";
-import { type SdkKey, type SdkDefinition, type EventItem, sdkOrder, buildDisplayItems, getEventColor, highlightCode } from "@/lib/shared";
+import { Play, Pause, SkipForward, RotateCcw, CheckCircle2, ChevronRight, ChevronDown, Server } from "lucide-react";
+import {
+  type SdkKey,
+  type SdkDefinition,
+  type EventItem,
+  sdkOrder,
+  buildDisplayItems,
+  getEventColor,
+  highlightCode,
+} from "@/lib/shared";
 import { useStepper } from "@/lib/StepperContext";
+
+// --- SDK definitions with sleep/timer code ---
 
 const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
   typescript: {
     label: "TypeScript",
     filename: "checkout-workflow.ts",
     codeLines: [
-      { line: "import { proxyActivities } from '@temporalio/workflow';", type: "import" },
+      { line: "import { proxyActivities, sleep } from '@temporalio/workflow';", type: "import" },
       { line: "", type: "empty" },
-      { line: "const { chargeCard, reserveInventory, shipOrder } = proxyActivities<{", type: "const" },
-      { line: "  chargeCard(orderId: string): Promise<{ authId: string }>;", type: "type" },
-      { line: "  reserveInventory(orderId: string): Promise<void>;", type: "type" },
-      { line: "  shipOrder(orderId: string): Promise<void>;", type: "type" },
-      { line: "}>({", type: "const" },
+      { line: "const { chargeCard, reserveInventory, shipOrder } = proxyActivities<Activities>({", type: "const" },
       { line: "  startToCloseTimeout: '30 seconds',", type: "config" },
       { line: "});", type: "const" },
       { line: "", type: "empty" },
       { line: "export async function CheckoutWorkflow(orderId: string) {", type: "function" },
       { line: "  const payment = await chargeCard(orderId);", type: "await", activity: "chargeCard" },
+      { line: "  // Fraud review hold — durable timer, no compute used", type: "comment" },
+      { line: "  await sleep('24 hours');", type: "await", activity: "timer" },
+      { line: "", type: "empty" },
       { line: "  await reserveInventory(orderId);", type: "await", activity: "reserveInventory" },
       { line: "  await shipOrder(orderId);", type: "await", activity: "shipOrder" },
       { line: "  return { status: 'COMPLETED', authId: payment.authId };", type: "return" },
@@ -34,6 +43,7 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "package workflows", type: "keyword" },
       { line: "", type: "empty" },
       { line: "import (", type: "import" },
+      { line: '  "time"', type: "import" },
       { line: '  "go.temporal.io/sdk/workflow"', type: "import" },
       { line: ")", type: "import" },
       { line: "", type: "empty" },
@@ -45,6 +55,10 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "", type: "empty" },
       { line: "  var payment PaymentResult", type: "const" },
       { line: "  err := workflow.ExecuteActivity(ctx, ChargeCard, orderID).Get(ctx, &payment)", type: "await", activity: "chargeCard" },
+      { line: "  if err != nil { return err }", type: "keyword" },
+      { line: "", type: "empty" },
+      { line: "  // Fraud review hold — durable timer, no compute used", type: "comment" },
+      { line: "  err = workflow.Sleep(ctx, 24*time.Hour)", type: "await", activity: "timer" },
       { line: "  if err != nil { return err }", type: "keyword" },
       { line: "", type: "empty" },
       { line: "  err = workflow.ExecuteActivity(ctx, ReserveInventory, orderID).Get(ctx, nil)", type: "await", activity: "reserveInventory" },
@@ -64,7 +78,6 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "from datetime import timedelta", type: "import" },
       { line: "from temporalio import workflow", type: "import" },
       { line: "", type: "empty" },
-      { line: "# Activity stubs with 30s timeout", type: "comment" },
       { line: "@workflow.defn", type: "decorator" },
       { line: "class CheckoutWorkflow:", type: "function" },
       { line: "", type: "empty" },
@@ -74,6 +87,9 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "      charge_card, order_id,", type: "config" },
       { line: "      start_to_close_timeout=timedelta(seconds=30),", type: "config" },
       { line: "    )", type: "const" },
+      { line: "", type: "empty" },
+      { line: "    # Fraud review hold — durable timer, no compute used", type: "comment" },
+      { line: "    await workflow.sleep(timedelta(hours=24))", type: "await", activity: "timer" },
       { line: "", type: "empty" },
       { line: "    await workflow.execute_activity(", type: "await", activity: "reserveInventory" },
       { line: "      reserve_inventory, order_id,", type: "config" },
@@ -107,6 +123,9 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "  @Override", type: "decorator" },
       { line: "  public CheckoutResult run(String orderId) {", type: "function" },
       { line: "    PaymentResult payment = activities.chargeCard(orderId);", type: "await", activity: "chargeCard" },
+      { line: "    // Fraud review hold — durable timer, no compute used", type: "comment" },
+      { line: "    Workflow.sleep(Duration.ofHours(24));", type: "await", activity: "timer" },
+      { line: "", type: "empty" },
       { line: "    activities.reserveInventory(orderId);", type: "await", activity: "reserveInventory" },
       { line: "    activities.shipOrder(orderId);", type: "await", activity: "shipOrder" },
       { line: '    return new CheckoutResult("COMPLETED", payment.getAuthId());', type: "return" },
@@ -115,6 +134,8 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
     ],
   },
 };
+
+// --- Event history for timers scenario ---
 
 const allEvents: EventItem[] = [
   { id: 1, name: "WorkflowExecutionStarted", type: "Workflow", timestamp: "00:00:00.000" },
@@ -127,84 +148,157 @@ const allEvents: EventItem[] = [
   { id: 8, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:00.893" },
   { id: 9, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:00.901" },
   { id: 10, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:00.904" },
-  { id: 11, name: "ActivityTaskScheduled", activity: "reserveInventory", type: "Activity", timestamp: "00:00:00.905" },
-  { id: 12, name: "ActivityTaskStarted", activity: "reserveInventory", type: "Activity", timestamp: "00:00:00.932" },
-  { id: 13, name: "ActivityTaskCompleted", activity: "reserveInventory", type: "Activity", timestamp: "00:00:01.156" },
-  { id: 14, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:01.157" },
-  { id: 15, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:01.165" },
-  { id: 16, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:01.167" },
-  { id: 17, name: "ActivityTaskScheduled", activity: "shipOrder", type: "Activity", timestamp: "00:00:01.168" },
-  { id: 18, name: "ActivityTaskStarted", activity: "shipOrder", type: "Activity", timestamp: "00:00:01.201" },
-  { id: 19, name: "ActivityTaskCompleted", activity: "shipOrder", type: "Activity", timestamp: "00:00:02.445" },
-  { id: 20, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:02.446" },
-  { id: 21, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:02.447" },
-  { id: 22, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:02.448" },
-  { id: 23, name: "WorkflowExecutionCompleted", type: "Workflow", timestamp: "00:00:02.449" },
+  { id: 11, name: "TimerStarted", activity: "timer", type: "Timer", timestamp: "00:00:00.905" },
+  // ═══ TIMER PAUSE — fast-forward animation plays before TimerFired ═══
+  { id: 12, name: "TimerFired", activity: "timer", type: "Timer", timestamp: "24:00:00.905" },
+  { id: 13, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "24:00:00.906" },
+  { id: 14, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "24:00:00.914" },
+  { id: 15, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "24:00:00.916" },
+  { id: 16, name: "ActivityTaskScheduled", activity: "reserveInventory", type: "Activity", timestamp: "24:00:00.917" },
+  { id: 17, name: "ActivityTaskStarted", activity: "reserveInventory", type: "Activity", timestamp: "24:00:00.950" },
+  { id: 18, name: "ActivityTaskCompleted", activity: "reserveInventory", type: "Activity", timestamp: "24:00:01.170" },
+  { id: 19, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "24:00:01.171" },
+  { id: 20, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "24:00:01.179" },
+  { id: 21, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "24:00:01.181" },
+  { id: 22, name: "ActivityTaskScheduled", activity: "shipOrder", type: "Activity", timestamp: "24:00:01.182" },
+  { id: 23, name: "ActivityTaskStarted", activity: "shipOrder", type: "Activity", timestamp: "24:00:01.210" },
+  { id: 24, name: "ActivityTaskCompleted", activity: "shipOrder", type: "Activity", timestamp: "24:00:02.460" },
+  { id: 25, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "24:00:02.461" },
+  { id: 26, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "24:00:02.470" },
+  { id: 27, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "24:00:02.472" },
+  { id: 28, name: "WorkflowExecutionCompleted", type: "Workflow", timestamp: "24:00:02.473" },
 ];
 
 const displayItems = buildDisplayItems(allEvents);
 
-// Crash display-item index: after ActivityTaskCompleted for reserveInventory
-// We want crash after the reserveInventory ATCompleted. Let's find it:
-const CRASH_DISPLAY_INDEX = displayItems.findIndex((item) => {
+// Timer pause index: the display item containing TimerFired (pause BEFORE showing it)
+const TIMER_PAUSE_INDEX = displayItems.findIndex((item) => {
   if (item.kind === 'single') {
     const ev = allEvents[item.eventIndex];
-    return ev.name === "ActivityTaskCompleted" && ev.activity === "reserveInventory";
+    return ev.name === "TimerFired";
   }
   return false;
-}); // crash happens when trying to add the NEXT item after reserveInventory completed
+});
 
-const getHighlightedLine = (eventIndex: number): string | null => {
-  const event = allEvents[eventIndex];
-  if (!event) return null;
-  return event.activity || null;
+const FAST_FORWARD_DURATION_MS = 4000;
+const TOTAL_TIMER_SECONDS = 86400; // 24 hours
+
+const formatTime = (totalSeconds: number): string => {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
 
-export const EventHistorySlide = () => {
+// --- Component ---
+
+export const TimersDemoSlide = () => {
   const { markVisited, markCompleted } = useStepper();
   const [activeSDK, setActiveSDK] = useState<SdkKey>("typescript");
   const [visibleEvents, setVisibleEvents] = useState<number[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [hasCrashed, setHasCrashed] = useState(false);
-  const [isReplaying, setIsReplaying] = useState(false);
-  const [replayIndex, setReplayIndex] = useState(0);
-  const [showCallout, setShowCallout] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [displayItemCursor, setDisplayItemCursor] = useState(0);
 
-  const [isReplayScanning, setIsReplayScanning] = useState(false);
+  // Timer-specific state
+  const [waitingForTimer, setWaitingForTimer] = useState(false);
+  const [isFastForwarding, setIsFastForwarding] = useState(false);
+  const [timerFired, setTimerFired] = useState(false);
+  const [showWaitingCallout, setShowWaitingCallout] = useState(false);
+  const [showFiredCallout, setShowFiredCallout] = useState(false);
+  const [clockSeconds, setClockSeconds] = useState(0);
 
   const hasAutoPlayed = useRef(false);
-  const replayChargeCardIndexRef = useRef(0);
+  const wasPlayingRef = useRef(false);
+  const fastForwardStartRef = useRef<number>(0);
+  const fastForwardIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeCodeLines = sdkDefinitions[activeSDK].codeLines;
-  const replayStopLineIndex = activeCodeLines.findIndex(item => item.activity === "reserveInventory");
-
-  const crashMode = true; // always on
+  const timerLineIndex = activeCodeLines.findIndex(item => item.activity === "timer");
 
   const reset = useCallback(() => {
-    setIsReplayScanning(false);
     setVisibleEvents([]);
     setSelectedEvent(null);
     setIsPlaying(false);
-    setHasCrashed(false);
-    setIsReplaying(false);
-    setReplayIndex(0);
-    setShowCallout(false);
     setCompleted(false);
     setExpandedGroups(new Set());
     setDisplayItemCursor(0);
+    setWaitingForTimer(false);
+    setIsFastForwarding(false);
+    setTimerFired(false);
+    setShowWaitingCallout(false);
+    setShowFiredCallout(false);
+    setClockSeconds(0);
     hasAutoPlayed.current = false;
+    wasPlayingRef.current = false;
+    if (fastForwardIntervalRef.current) {
+      clearInterval(fastForwardIntervalRef.current);
+      fastForwardIntervalRef.current = null;
+    }
   }, []);
 
-  const addNextEvent = useCallback(() => {
+  const finishFastForward = useCallback(() => {
+    if (fastForwardIntervalRef.current) {
+      clearInterval(fastForwardIntervalRef.current);
+      fastForwardIntervalRef.current = null;
+    }
+    setClockSeconds(TOTAL_TIMER_SECONDS);
+    setIsFastForwarding(false);
+    setWaitingForTimer(false);
+    setTimerFired(true);
+    setShowWaitingCallout(false);
+    setShowFiredCallout(true);
+
+    // Add the TimerFired event
+    const item = displayItems[TIMER_PAUSE_INDEX];
+    if (item.kind === 'single') {
+      setVisibleEvents(prev => [...prev, item.eventIndex]);
+      setSelectedEvent(item.eventIndex);
+    }
+    setDisplayItemCursor(TIMER_PAUSE_INDEX + 1);
+
+    setTimeout(() => setShowFiredCallout(false), 2000);
+
+    // Resume if was auto-playing
+    if (wasPlayingRef.current) {
+      setTimeout(() => setIsPlaying(true), 1500);
+    }
+  }, []);
+
+  const startFastForward = useCallback(() => {
+    setIsFastForwarding(true);
+    setClockSeconds(0);
+    fastForwardStartRef.current = Date.now();
+
+    fastForwardIntervalRef.current = setInterval(() => {
+      const elapsed = Date.now() - fastForwardStartRef.current;
+      const progress = Math.min(elapsed / FAST_FORWARD_DURATION_MS, 1);
+      const currentSeconds = Math.floor(progress * TOTAL_TIMER_SECONDS);
+      setClockSeconds(currentSeconds);
+
+      if (progress >= 1) {
+        finishFastForward();
+      }
+    }, 50);
+  }, [finishFastForward]);
+
+  const addNextEvent = useCallback((stepMode = false) => {
     const nextDisplayIdx = displayItemCursor;
 
-    if (crashMode && nextDisplayIdx === CRASH_DISPLAY_INDEX && !hasCrashed) {
-      setHasCrashed(true);
-      setIsPlaying(false);
+    // Pause BEFORE showing TimerFired
+    if (nextDisplayIdx === TIMER_PAUSE_INDEX && !timerFired) {
+      if (!waitingForTimer) {
+        wasPlayingRef.current = !stepMode;
+        setWaitingForTimer(true);
+        setShowWaitingCallout(true);
+        setIsPlaying(false);
+        // Start fast-forward after 1.5s delay
+        setTimeout(() => {
+          startFastForward();
+        }, 1500);
+      }
       return false;
     }
 
@@ -231,21 +325,12 @@ export const EventHistorySlide = () => {
       return true;
     }
     return false;
-  }, [displayItemCursor, crashMode, hasCrashed]);
+  }, [displayItemCursor, timerFired, waitingForTimer, startFastForward]);
 
-  const startReplay = useCallback(() => {
-    setIsReplaying(true);
-    setShowCallout(true);
-    setReplayIndex(0);
-    replayChargeCardIndexRef.current = replayStopLineIndex;
-    setTimeout(() => setShowCallout(false), 3000);
-    setIsReplayScanning(true);
-  }, [replayStopLineIndex]);
+  useEffect(() => { markVisited("timers"); }, [markVisited]);
+  useEffect(() => { if (completed) markCompleted("timers"); }, [completed, markCompleted]);
 
-  useEffect(() => { markVisited("crash-recovery"); }, [markVisited]);
-  useEffect(() => { if (completed) markCompleted("crash-recovery"); }, [completed, markCompleted]);
-
-  // Auto-play on mount with 600ms delay
+  // Auto-play on mount
   useEffect(() => {
     if (hasAutoPlayed.current) return;
     hasAutoPlayed.current = true;
@@ -269,31 +354,17 @@ export const EventHistorySlide = () => {
     return () => clearInterval(interval);
   }, [isPlaying, addNextEvent]);
 
-  // Replay scanning interval
+  // Cleanup fast-forward interval on unmount
   useEffect(() => {
-    if (!isReplayScanning) return;
-    const interval = setInterval(() => {
-      setReplayIndex(prev => prev + 1);
-    }, 300);
-    return () => clearInterval(interval);
-  }, [isReplayScanning]);
+    return () => {
+      if (fastForwardIntervalRef.current) {
+        clearInterval(fastForwardIntervalRef.current);
+      }
+    };
+  }, []);
 
-  // Replay scan completion
-  useEffect(() => {
-    if (isReplayScanning && replayIndex > replayStopLineIndex) {
-      setIsReplayScanning(false);
-      setTimeout(() => setIsPlaying(true), 500);
-    }
-  }, [isReplayScanning, replayIndex, replayStopLineIndex]);
-
-  const isAnythingPlaying = isPlaying || isReplayScanning;
-
-  const highlightedActivity = selectedEvent !== null ? getHighlightedLine(selectedEvent) : null;
-  // Crash overlay: show when crashed and the visible events match the pre-crash count
-  const crashEventCount = displayItems.slice(0, CRASH_DISPLAY_INDEX).reduce((sum, item) => {
-    return sum + (item.kind === 'single' ? 1 : item.eventIndices.length);
-  }, 0);
-  const showCrashOverlay = hasCrashed && !isReplaying && visibleEvents.length === crashEventCount;
+  const highlightedActivity = selectedEvent !== null ? allEvents[selectedEvent]?.activity || null : null;
+  const visibleSet = new Set(visibleEvents);
 
   const toggleGroup = (displayIdx: number) => {
     setExpandedGroups(prev => {
@@ -307,8 +378,16 @@ export const EventHistorySlide = () => {
     });
   };
 
-  // Build the set of visible event indices for quick lookup
-  const visibleSet = new Set(visibleEvents);
+  // Worker status
+  const getWorkerStatus = () => {
+    if (completed) return "completed";
+    if (waitingForTimer) return "idle";
+    if (visibleEvents.length > 0) return "running";
+    return "idle";
+  };
+  const workerStatus = getWorkerStatus();
+
+  const clockProgress = clockSeconds / TOTAL_TIMER_SECONDS;
 
   return (
     <div className="slide-content !px-8 !pt-6">
@@ -316,42 +395,31 @@ export const EventHistorySlide = () => {
         {/* Header */}
         <div className="text-center mb-6">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-2">
-            What happens when your server <span className="gradient-text">crashes mid-checkout</span>?
+            What if your workflow needs to <span className="gradient-text">wait 24 hours</span>?
           </h2>
           <p className="text-muted-foreground text-base max-w-2xl mx-auto">
-            Temporal records every step. When a worker dies, a new one picks up exactly where it left off.
+            Temporal workflows can sleep for hours or days — durably. No compute consumed, timers survive server restarts.
           </p>
         </div>
 
         {/* Worker Status Strip */}
         <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider mb-1 block">Your infrastructure</span>
         <div className="flex items-center gap-3 mb-4">
-          {/* Worker 1 */}
           <motion.div
-            animate={
-              hasCrashed
-                ? { opacity: 0.5 }
-                : { opacity: 1 }
-            }
-            transition={{ duration: 0.4 }}
             className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border transition-colors duration-400 ${
-              hasCrashed
-                ? 'bg-secondary/50 border-slide-border'
-                : isPlaying
-                  ? 'bg-temporal-green/10 border-temporal-green/30'
-                  : 'bg-secondary/50 border-slide-border'
+              workerStatus === "running" || workerStatus === "completed"
+                ? 'bg-temporal-green/10 border-temporal-green/30'
+                : 'bg-secondary/50 border-slide-border'
             }`}
           >
-            <Server className={`w-4 h-4 ${hasCrashed ? 'text-muted-foreground' : 'text-muted-foreground'}`} />
-            <span className={`text-sm font-medium ${hasCrashed ? 'text-muted-foreground' : 'text-foreground'}`}>
-              Worker 1
-            </span>
-            {hasCrashed ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-destructive/20 text-destructive border border-destructive/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
-                CRASHED
+            <Server className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Worker 1</span>
+            {workerStatus === "completed" ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+                <CheckCircle2 className="w-3 h-3" />
+                COMPLETED
               </span>
-            ) : isPlaying ? (
+            ) : workerStatus === "running" ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
                 <motion.span
                   className="w-1.5 h-1.5 rounded-full bg-temporal-green"
@@ -368,37 +436,26 @@ export const EventHistorySlide = () => {
             )}
           </motion.div>
 
-          {/* Worker 2 */}
+          {/* Durable wait badge */}
           <AnimatePresence>
-            {isReplaying && (
+            {waitingForTimer && (
               <motion.div
-                initial={{ opacity: 0, x: -20, scale: 0.95 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: -20, scale: 0.95 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border ${
-                  completed
-                    ? 'bg-temporal-green/10 border-temporal-green/30'
-                    : 'bg-temporal-green/10 border-temporal-green/30'
-                }`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-temporal-amber/10 border border-temporal-amber/30"
               >
-                <Server className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">Worker 2</span>
-                {completed ? (
-                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
-                    <CheckCircle2 className="w-3 h-3" />
-                    COMPLETED
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
-                    <motion.span
-                      className="w-1.5 h-1.5 rounded-full bg-temporal-green"
-                      animate={{ opacity: [1, 0.3, 1] }}
-                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                    ACTIVE
-                  </span>
-                )}
+                <motion.span
+                  className="w-1.5 h-1.5 rounded-full bg-temporal-amber"
+                  animate={{ opacity: [1, 0.3, 1] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                />
+                <span className="text-xs font-semibold text-temporal-amber">
+                  Durable wait — no compute used
+                </span>
+                <span className="text-[10px] text-temporal-amber/70 font-mono tabular-nums">
+                  {formatTime(clockSeconds)}
+                </span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -410,17 +467,8 @@ export const EventHistorySlide = () => {
           <div className="w-[55%] flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
-                Workflow code {isReplaying && "(replayed)"}
+                Workflow code
               </span>
-              {isReplaying && (
-                <motion.span
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono"
-                >
-                  REPLAYING
-                </motion.span>
-              )}
             </div>
 
             <div className="flex items-center gap-1 mb-2">
@@ -450,32 +498,31 @@ export const EventHistorySlide = () => {
               <pre className="mt-8 text-sm leading-relaxed">
                 <code>
                   {activeCodeLines.map((item, idx) => {
-                    const isHighlighted = item.activity && item.activity === highlightedActivity;
-                    const isReplayingLine = isReplaying && replayIndex === idx;
-                    const showHistoryAnnotation = isReplaying && item.activity === "reserveInventory" && replayIndex >= replayChargeCardIndexRef.current;
+                    const isHighlighted = item.activity && item.activity === highlightedActivity && !waitingForTimer;
+                    const isTimerWaitLine = waitingForTimer && idx === timerLineIndex;
 
                     return (
                       <motion.div
                         key={idx}
                         className={`px-2 -mx-2 rounded relative transition-all duration-200 border-l-[3px] ${
-                          isHighlighted
-                            ? 'bg-primary/40 border-primary shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
-                            : isReplayingLine
-                              ? 'bg-red-500/30 border-red-500 shadow-[inset_0_0_20px_rgba(239,68,68,0.15)]'
+                          isTimerWaitLine
+                            ? 'bg-temporal-amber/30 border-temporal-amber shadow-[inset_0_0_20px_rgba(245,158,11,0.15)]'
+                            : isHighlighted
+                              ? 'bg-primary/40 border-primary shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
                               : 'border-transparent'
                         }`}
                         animate={
-                          isHighlighted
-                            ? { backgroundColor: ["hsl(263 70% 58% / 0.25)", "hsl(263 70% 58% / 0.45)", "hsl(263 70% 58% / 0.25)"] }
-                            : isReplayingLine
-                              ? { backgroundColor: ["hsl(0 84% 60% / 0.2)", "hsl(0 84% 60% / 0.4)", "hsl(0 84% 60% / 0.2)"] }
+                          isTimerWaitLine
+                            ? { backgroundColor: ["hsl(45 93% 47% / 0.2)", "hsl(45 93% 47% / 0.4)", "hsl(45 93% 47% / 0.2)"] }
+                            : isHighlighted
+                              ? { backgroundColor: ["hsl(263 70% 58% / 0.25)", "hsl(263 70% 58% / 0.45)", "hsl(263 70% 58% / 0.25)"] }
                               : { backgroundColor: "transparent" }
                         }
                         transition={
-                          isHighlighted
+                          isTimerWaitLine
                             ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
-                            : isReplayingLine
-                              ? { duration: 0.4, repeat: Infinity }
+                            : isHighlighted
+                              ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
                               : { duration: 0.2 }
                         }
                       >
@@ -483,55 +530,49 @@ export const EventHistorySlide = () => {
                           {idx + 1}
                         </span>
                         {highlightCode(item.line, activeSDK)}
-
-                        {showHistoryAnnotation && (
-                          <motion.span
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-0.5 rounded bg-temporal-blue/20 text-temporal-blue"
-                          >
-                            Result loaded from history
-                          </motion.span>
-                        )}
                       </motion.div>
                     );
                   })}
                 </code>
               </pre>
-
-              {/* Crash overlay */}
-              {showCrashOverlay && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="absolute bottom-20 left-4 right-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3"
-                >
-                  <AlertTriangle className="w-5 h-5 text-destructive" />
-                  <span className="text-sm text-destructive">
-                    Worker crashed before next Workflow Task completed
-                  </span>
-                </motion.div>
-              )}
             </div>
           </div>
 
-          {/* Center Divider */}
+          {/* Center Divider with Callouts */}
           <div className="w-px bg-slide-border relative">
-            {/* Floating Callout */}
+            {/* Waiting Callout */}
             <AnimatePresence>
-              {showCallout && (
+              {showWaitingCallout && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-primary/30 shadow-xl"
+                  className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-temporal-amber/30 shadow-xl"
                 >
-                  <h4 className="font-semibold text-primary mb-2 text-center">Deterministic Replay</h4>
-                  <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>Re-executes workflow code</li>
-                    <li>Past results come from Event History</li>
-                    <li>Only new decisions append new events</li>
-                  </ul>
+                  <h4 className="font-semibold text-temporal-amber mb-2 text-center text-sm">Durable Timer</h4>
+                  <p className="text-xs text-muted-foreground text-center">
+                    The worker is idle — Temporal Server holds the <code className="text-temporal-amber">24-hour</code> timer durably, consuming no compute. Timers survive server restarts.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Fired Callout */}
+            <AnimatePresence>
+              {showFiredCallout && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-56 p-4 rounded-xl bg-slide-surface border border-temporal-green/30 shadow-xl"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <CheckCircle2 className="w-5 h-5 text-temporal-green" />
+                    <h4 className="font-semibold text-temporal-green text-sm">Timer fired!</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    24-hour hold complete. Workflow resumes.
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -572,28 +613,41 @@ export const EventHistorySlide = () => {
                         if (!visibleSet.has(eventIdx)) return null;
                         const event = allEvents[eventIdx];
                         const isSelected = selectedEvent === eventIdx;
+                        const isTimer = event.type === "Timer";
 
                         return (
                           <motion.div
                             key={event.id}
                             initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            animate={{
+                              opacity: 1,
+                              y: 0,
+                              ...(isTimer ? {
+                                backgroundColor: ["hsl(45 93% 47% / 0.1)", "hsl(45 93% 47% / 0.25)", "hsl(45 93% 47% / 0.1)"]
+                              } : {})
+                            }}
+                            transition={isTimer ? { backgroundColor: { duration: 1, repeat: 2, ease: "easeInOut" } } : undefined}
                             onClick={() => setSelectedEvent(eventIdx)}
                             className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-xs ${
                               isSelected
-                                ? 'bg-primary/10 border border-primary/30'
-                                : 'hover:bg-secondary/50 border border-transparent'
+                                ? isTimer
+                                  ? 'bg-temporal-amber/15 border border-temporal-amber/40'
+                                  : 'bg-primary/10 border border-primary/30'
+                                : isTimer
+                                  ? 'bg-temporal-amber/5 border border-temporal-amber/20'
+                                  : 'hover:bg-secondary/50 border border-transparent'
                             }`}
                           >
-                            <span className="w-5 h-5 flex items-center justify-center rounded bg-secondary text-muted-foreground font-mono text-[10px]">
+                            <span className={`w-5 h-5 flex items-center justify-center rounded font-mono text-[10px] ${
+                              isTimer ? 'bg-temporal-amber/20 text-temporal-amber' : 'bg-secondary text-muted-foreground'
+                            }`}>
                               {event.id}
                             </span>
                             <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getEventColor(event.type)}`}>
                               {event.type}
                             </span>
-                            <span className="flex-1 font-mono text-foreground truncate">
+                            <span className={`flex-1 font-mono truncate ${isTimer ? 'text-temporal-amber' : 'text-foreground'}`}>
                               {event.name}
-                              {event.activity && <span className="text-muted-foreground"> ({event.activity})</span>}
                             </span>
                             <span className="text-muted-foreground/60 font-mono text-[10px]">
                               {event.timestamp}
@@ -635,7 +689,6 @@ export const EventHistorySlide = () => {
                               </span>
                             </motion.div>
 
-                            {/* Expanded individual events */}
                             <AnimatePresence>
                               {isExpanded && displayItem.eventIndices.map(eventIdx => {
                                 const event = allEvents[eventIdx];
@@ -678,18 +731,51 @@ export const EventHistorySlide = () => {
                 )}
               </div>
 
-              {/* Crash note */}
-              {showCrashOverlay && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-3 border-t border-slide-border bg-slide-bg/50"
-                >
-                  <p className="text-xs text-muted-foreground italic">
-                    History is persisted. A new worker can replay.
-                  </p>
-                </motion.div>
-              )}
+              {/* Timer fast-forward footer */}
+              <AnimatePresence>
+                {waitingForTimer && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="p-3 border-t border-slide-border bg-slide-bg/50"
+                  >
+                    {isFastForwarding ? (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-mono text-lg text-temporal-amber tabular-nums">
+                            {formatTime(clockSeconds)}
+                          </span>
+                          <button
+                            onClick={finishFastForward}
+                            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            Skip
+                          </button>
+                        </div>
+                        <div className="relative h-1.5 rounded-full bg-secondary overflow-hidden">
+                          <motion.div
+                            className="absolute inset-y-0 left-0 rounded-full bg-temporal-amber"
+                            style={{ width: `${clockProgress * 100}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-end mt-1">
+                          <span className="text-[10px] text-muted-foreground/60 font-mono">24:00:00</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs text-temporal-amber font-medium">
+                          Durable timer started — workflow sleeping for 24 hours
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Fast-forwarding in a moment...
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -700,47 +786,30 @@ export const EventHistorySlide = () => {
             onClick={() => {
               if (isPlaying) {
                 setIsPlaying(false);
-              } else if (isReplayScanning) {
-                setIsReplayScanning(false);
-              } else if (isReplaying && replayIndex <= replayStopLineIndex) {
-                setIsReplayScanning(true);
               } else {
                 setIsPlaying(true);
               }
             }}
-            disabled={completed || (hasCrashed && !isReplaying)}
+            disabled={completed || waitingForTimer}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isAnythingPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            {isAnythingPlaying ? "Pause" : "Play"}
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isPlaying ? "Pause" : "Play"}
           </motion.button>
 
           <motion.button
-            onClick={addNextEvent}
-            disabled={isAnythingPlaying || completed || (hasCrashed && !isReplaying)}
+            onClick={() => {
+              addNextEvent(true);
+            }}
+            disabled={isPlaying || completed || waitingForTimer}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <SkipForward className="w-4 h-4" />
             Step
-          </motion.button>
-
-          <div className="w-px h-6 bg-slide-border mx-2" />
-
-          <motion.button
-            onClick={startReplay}
-            disabled={!hasCrashed || isReplaying}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            animate={hasCrashed && !isReplaying ? { scale: [1, 1.05, 1], boxShadow: ["0 0 0px rgba(249,115,22,0)", "0 0 12px rgba(249,115,22,0.4)", "0 0 0px rgba(249,115,22,0)"] } : {}}
-            transition={hasCrashed && !isReplaying ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : {}}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-temporal-orange/20 text-temporal-orange border border-temporal-orange/30 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Replay on New Worker
           </motion.button>
 
           <div className="w-px h-6 bg-slide-border mx-2" />
@@ -759,4 +828,3 @@ export const EventHistorySlide = () => {
     </div>
   );
 };
-

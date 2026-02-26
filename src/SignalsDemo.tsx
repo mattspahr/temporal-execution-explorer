@@ -1,26 +1,39 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, SkipForward, RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown, Server } from "lucide-react";
-import { type SdkKey, type SdkDefinition, type EventItem, sdkOrder, buildDisplayItems, getEventColor, highlightCode } from "@/lib/shared";
+import { Play, Pause, SkipForward, RotateCcw, CheckCircle2, ChevronRight, ChevronDown, Server, Send } from "lucide-react";
+import {
+  type SdkKey,
+  type SdkDefinition,
+  type EventItem,
+  sdkOrder,
+  buildDisplayItems,
+  getEventColor,
+  highlightCode,
+} from "@/lib/shared";
 import { useStepper } from "@/lib/StepperContext";
+
+// --- SDK definitions with signal/condition code ---
 
 const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
   typescript: {
     label: "TypeScript",
     filename: "checkout-workflow.ts",
     codeLines: [
-      { line: "import { proxyActivities } from '@temporalio/workflow';", type: "import" },
+      { line: "import { proxyActivities, defineSignal, setHandler, condition } from '@temporalio/workflow';", type: "import" },
       { line: "", type: "empty" },
-      { line: "const { chargeCard, reserveInventory, shipOrder } = proxyActivities<{", type: "const" },
-      { line: "  chargeCard(orderId: string): Promise<{ authId: string }>;", type: "type" },
-      { line: "  reserveInventory(orderId: string): Promise<void>;", type: "type" },
-      { line: "  shipOrder(orderId: string): Promise<void>;", type: "type" },
-      { line: "}>({", type: "const" },
+      { line: "const { chargeCard, reserveInventory, shipOrder } = proxyActivities<Activities>({", type: "const" },
       { line: "  startToCloseTimeout: '30 seconds',", type: "config" },
       { line: "});", type: "const" },
       { line: "", type: "empty" },
+      { line: "const approvalSignal = defineSignal('approvalSignal');", type: "const" },
+      { line: "", type: "empty" },
       { line: "export async function CheckoutWorkflow(orderId: string) {", type: "function" },
+      { line: "  let approved = false;", type: "const" },
+      { line: "  setHandler(approvalSignal, () => { approved = true; });", type: "const" },
+      { line: "", type: "empty" },
       { line: "  const payment = await chargeCard(orderId);", type: "await", activity: "chargeCard" },
+      { line: "  await condition(() => approved);", type: "await", activity: "signal" },
+      { line: "", type: "empty" },
       { line: "  await reserveInventory(orderId);", type: "await", activity: "reserveInventory" },
       { line: "  await shipOrder(orderId);", type: "await", activity: "shipOrder" },
       { line: "  return { status: 'COMPLETED', authId: payment.authId };", type: "return" },
@@ -47,6 +60,11 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "  err := workflow.ExecuteActivity(ctx, ChargeCard, orderID).Get(ctx, &payment)", type: "await", activity: "chargeCard" },
       { line: "  if err != nil { return err }", type: "keyword" },
       { line: "", type: "empty" },
+      { line: "  // Wait for approval signal", type: "comment" },
+      { line: "  var approved bool", type: "const" },
+      { line: "  signalCh := workflow.GetSignalChannel(ctx, \"ApprovalSignal\")", type: "const" },
+      { line: "  signalCh.Receive(ctx, &approved)", type: "await", activity: "signal" },
+      { line: "", type: "empty" },
       { line: "  err = workflow.ExecuteActivity(ctx, ReserveInventory, orderID).Get(ctx, nil)", type: "await", activity: "reserveInventory" },
       { line: "  if err != nil { return err }", type: "keyword" },
       { line: "", type: "empty" },
@@ -64,9 +82,13 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "from datetime import timedelta", type: "import" },
       { line: "from temporalio import workflow", type: "import" },
       { line: "", type: "empty" },
-      { line: "# Activity stubs with 30s timeout", type: "comment" },
       { line: "@workflow.defn", type: "decorator" },
       { line: "class CheckoutWorkflow:", type: "function" },
+      { line: "  approved = False", type: "const" },
+      { line: "", type: "empty" },
+      { line: "  @workflow.signal", type: "decorator" },
+      { line: "  def approval_signal(self) -> None:", type: "function" },
+      { line: "    self.approved = True", type: "const" },
       { line: "", type: "empty" },
       { line: "  @workflow.run", type: "decorator" },
       { line: "  async def run(self, order_id: str) -> dict:", type: "function" },
@@ -74,6 +96,8 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "      charge_card, order_id,", type: "config" },
       { line: "      start_to_close_timeout=timedelta(seconds=30),", type: "config" },
       { line: "    )", type: "const" },
+      { line: "", type: "empty" },
+      { line: "    await workflow.wait_condition(lambda: self.approved)", type: "await", activity: "signal" },
       { line: "", type: "empty" },
       { line: "    await workflow.execute_activity(", type: "await", activity: "reserveInventory" },
       { line: "      reserve_inventory, order_id,", type: "config" },
@@ -97,6 +121,7 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "import java.time.Duration;", type: "import" },
       { line: "", type: "empty" },
       { line: "public class CheckoutWorkflowImpl implements CheckoutWorkflow {", type: "function" },
+      { line: "  private boolean approved = false;", type: "const" },
       { line: "", type: "empty" },
       { line: "  private final Activities activities = Workflow.newActivityStub(", type: "const" },
       { line: "    Activities.class,", type: "config" },
@@ -104,9 +129,14 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
       { line: "      .setStartToCloseTimeout(Duration.ofSeconds(30))", type: "config" },
       { line: "      .build());", type: "config" },
       { line: "", type: "empty" },
+      { line: "  @SignalMethod", type: "decorator" },
+      { line: "  public void approvalSignal() { this.approved = true; }", type: "function" },
+      { line: "", type: "empty" },
       { line: "  @Override", type: "decorator" },
       { line: "  public CheckoutResult run(String orderId) {", type: "function" },
       { line: "    PaymentResult payment = activities.chargeCard(orderId);", type: "await", activity: "chargeCard" },
+      { line: "    Workflow.await(() -> this.approved);", type: "await", activity: "signal" },
+      { line: "", type: "empty" },
       { line: "    activities.reserveInventory(orderId);", type: "await", activity: "reserveInventory" },
       { line: "    activities.shipOrder(orderId);", type: "await", activity: "shipOrder" },
       { line: '    return new CheckoutResult("COMPLETED", payment.getAuthId());', type: "return" },
@@ -115,6 +145,8 @@ const sdkDefinitions: Record<SdkKey, SdkDefinition> = {
     ],
   },
 };
+
+// --- Event history for signals scenario ---
 
 const allEvents: EventItem[] = [
   { id: 1, name: "WorkflowExecutionStarted", type: "Workflow", timestamp: "00:00:00.000" },
@@ -127,84 +159,87 @@ const allEvents: EventItem[] = [
   { id: 8, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:00.893" },
   { id: 9, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:00.901" },
   { id: 10, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:00.904" },
-  { id: 11, name: "ActivityTaskScheduled", activity: "reserveInventory", type: "Activity", timestamp: "00:00:00.905" },
-  { id: 12, name: "ActivityTaskStarted", activity: "reserveInventory", type: "Activity", timestamp: "00:00:00.932" },
-  { id: 13, name: "ActivityTaskCompleted", activity: "reserveInventory", type: "Activity", timestamp: "00:00:01.156" },
-  { id: 14, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:01.157" },
-  { id: 15, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:01.165" },
-  { id: 16, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:01.167" },
-  { id: 17, name: "ActivityTaskScheduled", activity: "shipOrder", type: "Activity", timestamp: "00:00:01.168" },
-  { id: 18, name: "ActivityTaskStarted", activity: "shipOrder", type: "Activity", timestamp: "00:00:01.201" },
-  { id: 19, name: "ActivityTaskCompleted", activity: "shipOrder", type: "Activity", timestamp: "00:00:02.445" },
-  { id: 20, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:00:02.446" },
-  { id: 21, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:00:02.447" },
-  { id: 22, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:00:02.448" },
-  { id: 23, name: "WorkflowExecutionCompleted", type: "Workflow", timestamp: "00:00:02.449" },
+  // ═══ SIGNAL PAUSE — user must click "Send Approval Signal" ═══
+  { id: 11, name: "WorkflowExecutionSignaled", activity: "signal", type: "Signal", timestamp: "00:03:24.100" },
+  { id: 12, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:03:24.101" },
+  { id: 13, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:03:24.110" },
+  { id: 14, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:03:24.112" },
+  { id: 15, name: "ActivityTaskScheduled", activity: "reserveInventory", type: "Activity", timestamp: "00:03:24.113" },
+  { id: 16, name: "ActivityTaskStarted", activity: "reserveInventory", type: "Activity", timestamp: "00:03:24.140" },
+  { id: 17, name: "ActivityTaskCompleted", activity: "reserveInventory", type: "Activity", timestamp: "00:03:24.370" },
+  { id: 18, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:03:24.371" },
+  { id: 19, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:03:24.379" },
+  { id: 20, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:03:24.381" },
+  { id: 21, name: "ActivityTaskScheduled", activity: "shipOrder", type: "Activity", timestamp: "00:03:24.382" },
+  { id: 22, name: "ActivityTaskStarted", activity: "shipOrder", type: "Activity", timestamp: "00:03:24.410" },
+  { id: 23, name: "ActivityTaskCompleted", activity: "shipOrder", type: "Activity", timestamp: "00:03:25.660" },
+  { id: 24, name: "WorkflowTaskScheduled", type: "WorkflowTask", timestamp: "00:03:25.661" },
+  { id: 25, name: "WorkflowTaskStarted", type: "WorkflowTask", timestamp: "00:03:25.670" },
+  { id: 26, name: "WorkflowTaskCompleted", type: "WorkflowTask", timestamp: "00:03:25.672" },
+  { id: 27, name: "WorkflowExecutionCompleted", type: "Workflow", timestamp: "00:03:25.673" },
 ];
 
 const displayItems = buildDisplayItems(allEvents);
 
-// Crash display-item index: after ActivityTaskCompleted for reserveInventory
-// We want crash after the reserveInventory ATCompleted. Let's find it:
-const CRASH_DISPLAY_INDEX = displayItems.findIndex((item) => {
+// Signal pause index: the display item containing the Signal event
+const SIGNAL_PAUSE_INDEX = displayItems.findIndex((item) => {
   if (item.kind === 'single') {
     const ev = allEvents[item.eventIndex];
-    return ev.name === "ActivityTaskCompleted" && ev.activity === "reserveInventory";
+    return ev.type === "Signal";
   }
   return false;
-}); // crash happens when trying to add the NEXT item after reserveInventory completed
+});
 
-const getHighlightedLine = (eventIndex: number): string | null => {
-  const event = allEvents[eventIndex];
-  if (!event) return null;
-  return event.activity || null;
-};
+// --- Component ---
 
-export const EventHistorySlide = () => {
+export const SignalsDemoSlide = () => {
   const { markVisited, markCompleted } = useStepper();
   const [activeSDK, setActiveSDK] = useState<SdkKey>("typescript");
   const [visibleEvents, setVisibleEvents] = useState<number[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [hasCrashed, setHasCrashed] = useState(false);
-  const [isReplaying, setIsReplaying] = useState(false);
-  const [replayIndex, setReplayIndex] = useState(0);
-  const [showCallout, setShowCallout] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [displayItemCursor, setDisplayItemCursor] = useState(0);
 
-  const [isReplayScanning, setIsReplayScanning] = useState(false);
+  // Signal-specific state
+  const [waitingForSignal, setWaitingForSignal] = useState(false);
+  const [signalReceived, setSignalReceived] = useState(false);
+  const [showWaitingCallout, setShowWaitingCallout] = useState(false);
+  const [showReceivedCallout, setShowReceivedCallout] = useState(false);
 
   const hasAutoPlayed = useRef(false);
-  const replayChargeCardIndexRef = useRef(0);
+  const wasPlayingRef = useRef(false);
 
   const activeCodeLines = sdkDefinitions[activeSDK].codeLines;
-  const replayStopLineIndex = activeCodeLines.findIndex(item => item.activity === "reserveInventory");
-
-  const crashMode = true; // always on
+  const signalLineIndex = activeCodeLines.findIndex(item => item.activity === "signal");
 
   const reset = useCallback(() => {
-    setIsReplayScanning(false);
     setVisibleEvents([]);
     setSelectedEvent(null);
     setIsPlaying(false);
-    setHasCrashed(false);
-    setIsReplaying(false);
-    setReplayIndex(0);
-    setShowCallout(false);
     setCompleted(false);
     setExpandedGroups(new Set());
     setDisplayItemCursor(0);
+    setWaitingForSignal(false);
+    setSignalReceived(false);
+    setShowWaitingCallout(false);
+    setShowReceivedCallout(false);
     hasAutoPlayed.current = false;
+    wasPlayingRef.current = false;
   }, []);
 
-  const addNextEvent = useCallback(() => {
+  const addNextEvent = useCallback((stepMode = false) => {
     const nextDisplayIdx = displayItemCursor;
 
-    if (crashMode && nextDisplayIdx === CRASH_DISPLAY_INDEX && !hasCrashed) {
-      setHasCrashed(true);
-      setIsPlaying(false);
+    // Pause BEFORE showing the signal event
+    if (nextDisplayIdx === SIGNAL_PAUSE_INDEX && !signalReceived) {
+      if (!waitingForSignal) {
+        wasPlayingRef.current = !stepMode;
+        setWaitingForSignal(true);
+        setShowWaitingCallout(true);
+        setIsPlaying(false);
+      }
       return false;
     }
 
@@ -231,21 +266,36 @@ export const EventHistorySlide = () => {
       return true;
     }
     return false;
-  }, [displayItemCursor, crashMode, hasCrashed]);
+  }, [displayItemCursor, signalReceived, waitingForSignal]);
 
-  const startReplay = useCallback(() => {
-    setIsReplaying(true);
-    setShowCallout(true);
-    setReplayIndex(0);
-    replayChargeCardIndexRef.current = replayStopLineIndex;
-    setTimeout(() => setShowCallout(false), 3000);
-    setIsReplayScanning(true);
-  }, [replayStopLineIndex]);
+  const handleSendSignal = useCallback(() => {
+    if (!waitingForSignal) return;
 
-  useEffect(() => { markVisited("crash-recovery"); }, [markVisited]);
-  useEffect(() => { if (completed) markCompleted("crash-recovery"); }, [completed, markCompleted]);
+    setWaitingForSignal(false);
+    setSignalReceived(true);
+    setShowWaitingCallout(false);
+    setShowReceivedCallout(true);
 
-  // Auto-play on mount with 600ms delay
+    // Add the signal event
+    const item = displayItems[SIGNAL_PAUSE_INDEX];
+    if (item.kind === 'single') {
+      setVisibleEvents(prev => [...prev, item.eventIndex]);
+      setSelectedEvent(item.eventIndex);
+    }
+    setDisplayItemCursor(SIGNAL_PAUSE_INDEX + 1);
+
+    setTimeout(() => setShowReceivedCallout(false), 2000);
+
+    // Resume if was auto-playing
+    if (wasPlayingRef.current) {
+      setTimeout(() => setIsPlaying(true), 1500);
+    }
+  }, [waitingForSignal]);
+
+  useEffect(() => { markVisited("signals"); }, [markVisited]);
+  useEffect(() => { if (completed) markCompleted("signals"); }, [completed, markCompleted]);
+
+  // Auto-play on mount
   useEffect(() => {
     if (hasAutoPlayed.current) return;
     hasAutoPlayed.current = true;
@@ -269,31 +319,8 @@ export const EventHistorySlide = () => {
     return () => clearInterval(interval);
   }, [isPlaying, addNextEvent]);
 
-  // Replay scanning interval
-  useEffect(() => {
-    if (!isReplayScanning) return;
-    const interval = setInterval(() => {
-      setReplayIndex(prev => prev + 1);
-    }, 300);
-    return () => clearInterval(interval);
-  }, [isReplayScanning]);
-
-  // Replay scan completion
-  useEffect(() => {
-    if (isReplayScanning && replayIndex > replayStopLineIndex) {
-      setIsReplayScanning(false);
-      setTimeout(() => setIsPlaying(true), 500);
-    }
-  }, [isReplayScanning, replayIndex, replayStopLineIndex]);
-
-  const isAnythingPlaying = isPlaying || isReplayScanning;
-
-  const highlightedActivity = selectedEvent !== null ? getHighlightedLine(selectedEvent) : null;
-  // Crash overlay: show when crashed and the visible events match the pre-crash count
-  const crashEventCount = displayItems.slice(0, CRASH_DISPLAY_INDEX).reduce((sum, item) => {
-    return sum + (item.kind === 'single' ? 1 : item.eventIndices.length);
-  }, 0);
-  const showCrashOverlay = hasCrashed && !isReplaying && visibleEvents.length === crashEventCount;
+  const highlightedActivity = selectedEvent !== null ? allEvents[selectedEvent]?.activity || null : null;
+  const visibleSet = new Set(visibleEvents);
 
   const toggleGroup = (displayIdx: number) => {
     setExpandedGroups(prev => {
@@ -307,8 +334,14 @@ export const EventHistorySlide = () => {
     });
   };
 
-  // Build the set of visible event indices for quick lookup
-  const visibleSet = new Set(visibleEvents);
+  // Worker status — worker goes IDLE while waiting for signal (no resources consumed)
+  const getWorkerStatus = () => {
+    if (completed) return "completed";
+    if (waitingForSignal) return "idle";
+    if (visibleEvents.length > 0) return "running";
+    return "idle";
+  };
+  const workerStatus = getWorkerStatus();
 
   return (
     <div className="slide-content !px-8 !pt-6">
@@ -316,42 +349,31 @@ export const EventHistorySlide = () => {
         {/* Header */}
         <div className="text-center mb-6">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-2">
-            What happens when your server <span className="gradient-text">crashes mid-checkout</span>?
+            What if your workflow needs <span className="gradient-text">human approval</span>?
           </h2>
           <p className="text-muted-foreground text-base max-w-2xl mx-auto">
-            Temporal records every step. When a worker dies, a new one picks up exactly where it left off.
+            Temporal workflows can pause for external signals — minutes, hours, or days — without consuming resources.
           </p>
         </div>
 
         {/* Worker Status Strip */}
         <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider mb-1 block">Your infrastructure</span>
         <div className="flex items-center gap-3 mb-4">
-          {/* Worker 1 */}
           <motion.div
-            animate={
-              hasCrashed
-                ? { opacity: 0.5 }
-                : { opacity: 1 }
-            }
-            transition={{ duration: 0.4 }}
             className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border transition-colors duration-400 ${
-              hasCrashed
-                ? 'bg-secondary/50 border-slide-border'
-                : isPlaying
-                  ? 'bg-temporal-green/10 border-temporal-green/30'
-                  : 'bg-secondary/50 border-slide-border'
+              workerStatus === "running" || workerStatus === "completed"
+                ? 'bg-temporal-green/10 border-temporal-green/30'
+                : 'bg-secondary/50 border-slide-border'
             }`}
           >
-            <Server className={`w-4 h-4 ${hasCrashed ? 'text-muted-foreground' : 'text-muted-foreground'}`} />
-            <span className={`text-sm font-medium ${hasCrashed ? 'text-muted-foreground' : 'text-foreground'}`}>
-              Worker 1
-            </span>
-            {hasCrashed ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-destructive/20 text-destructive border border-destructive/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
-                CRASHED
+            <Server className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Worker 1</span>
+            {workerStatus === "completed" ? (
+              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+                <CheckCircle2 className="w-3 h-3" />
+                COMPLETED
               </span>
-            ) : isPlaying ? (
+            ) : workerStatus === "running" ? (
               <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
                 <motion.span
                   className="w-1.5 h-1.5 rounded-full bg-temporal-green"
@@ -368,37 +390,26 @@ export const EventHistorySlide = () => {
             )}
           </motion.div>
 
-          {/* Worker 2 */}
+          {/* Waiting for signal badge — shown next to worker to emphasize it's Temporal holding state, not the worker */}
           <AnimatePresence>
-            {isReplaying && (
+            {waitingForSignal && (
               <motion.div
-                initial={{ opacity: 0, x: -20, scale: 0.95 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: -20, scale: 0.95 }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border ${
-                  completed
-                    ? 'bg-temporal-green/10 border-temporal-green/30'
-                    : 'bg-temporal-green/10 border-temporal-green/30'
-                }`}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-temporal-pink/10 border border-temporal-pink/30"
               >
-                <Server className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">Worker 2</span>
-                {completed ? (
-                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
-                    <CheckCircle2 className="w-3 h-3" />
-                    COMPLETED
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
-                    <motion.span
-                      className="w-1.5 h-1.5 rounded-full bg-temporal-green"
-                      animate={{ opacity: [1, 0.3, 1] }}
-                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                    ACTIVE
-                  </span>
-                )}
+                <motion.span
+                  className="w-1.5 h-1.5 rounded-full bg-temporal-pink"
+                  animate={{ opacity: [1, 0.3, 1] }}
+                  transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                />
+                <span className="text-xs font-semibold text-temporal-pink">
+                  Durable wait — no compute used
+                </span>
+                <span className="text-[10px] text-temporal-pink/70">
+                  (workflow paused on signal)
+                </span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -410,17 +421,8 @@ export const EventHistorySlide = () => {
           <div className="w-[55%] flex flex-col">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
-                Workflow code {isReplaying && "(replayed)"}
+                Workflow code
               </span>
-              {isReplaying && (
-                <motion.span
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/30 font-mono"
-                >
-                  REPLAYING
-                </motion.span>
-              )}
             </div>
 
             <div className="flex items-center gap-1 mb-2">
@@ -450,32 +452,31 @@ export const EventHistorySlide = () => {
               <pre className="mt-8 text-sm leading-relaxed">
                 <code>
                   {activeCodeLines.map((item, idx) => {
-                    const isHighlighted = item.activity && item.activity === highlightedActivity;
-                    const isReplayingLine = isReplaying && replayIndex === idx;
-                    const showHistoryAnnotation = isReplaying && item.activity === "reserveInventory" && replayIndex >= replayChargeCardIndexRef.current;
+                    const isHighlighted = item.activity && item.activity === highlightedActivity && !waitingForSignal;
+                    const isSignalWaitLine = waitingForSignal && idx === signalLineIndex;
 
                     return (
                       <motion.div
                         key={idx}
                         className={`px-2 -mx-2 rounded relative transition-all duration-200 border-l-[3px] ${
-                          isHighlighted
-                            ? 'bg-primary/40 border-primary shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
-                            : isReplayingLine
-                              ? 'bg-red-500/30 border-red-500 shadow-[inset_0_0_20px_rgba(239,68,68,0.15)]'
+                          isSignalWaitLine
+                            ? 'bg-temporal-pink/30 border-temporal-pink shadow-[inset_0_0_20px_rgba(232,69,147,0.15)]'
+                            : isHighlighted
+                              ? 'bg-primary/40 border-primary shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
                               : 'border-transparent'
                         }`}
                         animate={
-                          isHighlighted
-                            ? { backgroundColor: ["hsl(263 70% 58% / 0.25)", "hsl(263 70% 58% / 0.45)", "hsl(263 70% 58% / 0.25)"] }
-                            : isReplayingLine
-                              ? { backgroundColor: ["hsl(0 84% 60% / 0.2)", "hsl(0 84% 60% / 0.4)", "hsl(0 84% 60% / 0.2)"] }
+                          isSignalWaitLine
+                            ? { backgroundColor: ["hsl(330 78% 59% / 0.2)", "hsl(330 78% 59% / 0.4)", "hsl(330 78% 59% / 0.2)"] }
+                            : isHighlighted
+                              ? { backgroundColor: ["hsl(263 70% 58% / 0.25)", "hsl(263 70% 58% / 0.45)", "hsl(263 70% 58% / 0.25)"] }
                               : { backgroundColor: "transparent" }
                         }
                         transition={
-                          isHighlighted
+                          isSignalWaitLine
                             ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
-                            : isReplayingLine
-                              ? { duration: 0.4, repeat: Infinity }
+                            : isHighlighted
+                              ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
                               : { duration: 0.2 }
                         }
                       >
@@ -483,55 +484,49 @@ export const EventHistorySlide = () => {
                           {idx + 1}
                         </span>
                         {highlightCode(item.line, activeSDK)}
-
-                        {showHistoryAnnotation && (
-                          <motion.span
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-0.5 rounded bg-temporal-blue/20 text-temporal-blue"
-                          >
-                            Result loaded from history
-                          </motion.span>
-                        )}
                       </motion.div>
                     );
                   })}
                 </code>
               </pre>
-
-              {/* Crash overlay */}
-              {showCrashOverlay && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="absolute bottom-20 left-4 right-4 p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-3"
-                >
-                  <AlertTriangle className="w-5 h-5 text-destructive" />
-                  <span className="text-sm text-destructive">
-                    Worker crashed before next Workflow Task completed
-                  </span>
-                </motion.div>
-              )}
             </div>
           </div>
 
-          {/* Center Divider */}
+          {/* Center Divider with Callouts */}
           <div className="w-px bg-slide-border relative">
-            {/* Floating Callout */}
+            {/* Waiting Callout */}
             <AnimatePresence>
-              {showCallout && (
+              {showWaitingCallout && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-primary/30 shadow-xl"
+                  className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-temporal-pink/30 shadow-xl"
                 >
-                  <h4 className="font-semibold text-primary mb-2 text-center">Deterministic Replay</h4>
-                  <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>Re-executes workflow code</li>
-                    <li>Past results come from Event History</li>
-                    <li>Only new decisions append new events</li>
-                  </ul>
+                  <h4 className="font-semibold text-temporal-pink mb-2 text-center text-sm">Waiting for Signal</h4>
+                  <p className="text-xs text-muted-foreground text-center">
+                    The workflow is paused on <code className="text-temporal-pink">condition()</code>, consuming no resources. It could wait minutes, hours, or days.
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Received Callout */}
+            <AnimatePresence>
+              {showReceivedCallout && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-56 p-4 rounded-xl bg-slide-surface border border-temporal-green/30 shadow-xl"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <CheckCircle2 className="w-5 h-5 text-temporal-green" />
+                    <h4 className="font-semibold text-temporal-green text-sm">Signal received!</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Approval granted. Workflow resumes execution.
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -572,28 +567,41 @@ export const EventHistorySlide = () => {
                         if (!visibleSet.has(eventIdx)) return null;
                         const event = allEvents[eventIdx];
                         const isSelected = selectedEvent === eventIdx;
+                        const isSignal = event.type === "Signal";
 
                         return (
                           <motion.div
                             key={event.id}
                             initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            animate={{
+                              opacity: 1,
+                              y: 0,
+                              ...(isSignal ? {
+                                backgroundColor: ["hsl(330 78% 59% / 0.1)", "hsl(330 78% 59% / 0.25)", "hsl(330 78% 59% / 0.1)"]
+                              } : {})
+                            }}
+                            transition={isSignal ? { backgroundColor: { duration: 1, repeat: 2, ease: "easeInOut" } } : undefined}
                             onClick={() => setSelectedEvent(eventIdx)}
                             className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all text-xs ${
                               isSelected
-                                ? 'bg-primary/10 border border-primary/30'
-                                : 'hover:bg-secondary/50 border border-transparent'
+                                ? isSignal
+                                  ? 'bg-temporal-pink/15 border border-temporal-pink/40'
+                                  : 'bg-primary/10 border border-primary/30'
+                                : isSignal
+                                  ? 'bg-temporal-pink/5 border border-temporal-pink/20'
+                                  : 'hover:bg-secondary/50 border border-transparent'
                             }`}
                           >
-                            <span className="w-5 h-5 flex items-center justify-center rounded bg-secondary text-muted-foreground font-mono text-[10px]">
+                            <span className={`w-5 h-5 flex items-center justify-center rounded font-mono text-[10px] ${
+                              isSignal ? 'bg-temporal-pink/20 text-temporal-pink' : 'bg-secondary text-muted-foreground'
+                            }`}>
                               {event.id}
                             </span>
                             <span className={`px-1.5 py-0.5 rounded text-[10px] border ${getEventColor(event.type)}`}>
                               {event.type}
                             </span>
-                            <span className="flex-1 font-mono text-foreground truncate">
+                            <span className={`flex-1 font-mono truncate ${isSignal ? 'text-temporal-pink' : 'text-foreground'}`}>
                               {event.name}
-                              {event.activity && <span className="text-muted-foreground"> ({event.activity})</span>}
                             </span>
                             <span className="text-muted-foreground/60 font-mono text-[10px]">
                               {event.timestamp}
@@ -635,7 +643,6 @@ export const EventHistorySlide = () => {
                               </span>
                             </motion.div>
 
-                            {/* Expanded individual events */}
                             <AnimatePresence>
                               {isExpanded && displayItem.eventIndices.map(eventIdx => {
                                 const event = allEvents[eventIdx];
@@ -678,18 +685,24 @@ export const EventHistorySlide = () => {
                 )}
               </div>
 
-              {/* Crash note */}
-              {showCrashOverlay && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-3 border-t border-slide-border bg-slide-bg/50"
-                >
-                  <p className="text-xs text-muted-foreground italic">
-                    History is persisted. A new worker can replay.
-                  </p>
-                </motion.div>
-              )}
+              {/* Signal waiting footer */}
+              <AnimatePresence>
+                {waitingForSignal && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="p-3 border-t border-slide-border bg-slide-bg/50"
+                  >
+                    <p className="text-xs text-temporal-pink font-medium">
+                      Workflow blocked — waiting for approval signal
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Click "Send Approval Signal" to continue
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -700,26 +713,24 @@ export const EventHistorySlide = () => {
             onClick={() => {
               if (isPlaying) {
                 setIsPlaying(false);
-              } else if (isReplayScanning) {
-                setIsReplayScanning(false);
-              } else if (isReplaying && replayIndex <= replayStopLineIndex) {
-                setIsReplayScanning(true);
               } else {
                 setIsPlaying(true);
               }
             }}
-            disabled={completed || (hasCrashed && !isReplaying)}
+            disabled={completed || waitingForSignal}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isAnythingPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            {isAnythingPlaying ? "Pause" : "Play"}
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isPlaying ? "Pause" : "Play"}
           </motion.button>
 
           <motion.button
-            onClick={addNextEvent}
-            disabled={isAnythingPlaying || completed || (hasCrashed && !isReplaying)}
+            onClick={() => {
+              addNextEvent(true);
+            }}
+            disabled={isPlaying || completed || waitingForSignal}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
@@ -730,20 +741,37 @@ export const EventHistorySlide = () => {
 
           <div className="w-px h-6 bg-slide-border mx-2" />
 
-          <motion.button
-            onClick={startReplay}
-            disabled={!hasCrashed || isReplaying}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            animate={hasCrashed && !isReplaying ? { scale: [1, 1.05, 1], boxShadow: ["0 0 0px rgba(249,115,22,0)", "0 0 12px rgba(249,115,22,0.4)", "0 0 0px rgba(249,115,22,0)"] } : {}}
-            transition={hasCrashed && !isReplaying ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : {}}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-temporal-orange/20 text-temporal-orange border border-temporal-orange/30 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Replay on New Worker
-          </motion.button>
+          {/* Send Approval Signal Button */}
+          <AnimatePresence>
+            {waitingForSignal && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{
+                  opacity: 1,
+                  scale: [1, 1.05, 1],
+                  boxShadow: [
+                    "0 0 0px rgba(232,69,147,0)",
+                    "0 0 12px rgba(232,69,147,0.4)",
+                    "0 0 0px rgba(232,69,147,0)",
+                  ],
+                }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{
+                  opacity: { duration: 0.2 },
+                  scale: { duration: 1.5, repeat: Infinity, ease: "easeInOut" },
+                  boxShadow: { duration: 1.5, repeat: Infinity, ease: "easeInOut" },
+                }}
+                onClick={handleSendSignal}
+                whileTap={{ scale: 0.95 }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-temporal-pink/20 text-temporal-pink border border-temporal-pink/30 text-sm font-medium"
+              >
+                <Send className="w-4 h-4" />
+                Send Approval Signal
+              </motion.button>
+            )}
+          </AnimatePresence>
 
-          <div className="w-px h-6 bg-slide-border mx-2" />
+          {!waitingForSignal && <div className="w-px h-6 bg-slide-border mx-2" />}
 
           <motion.button
             onClick={reset}
@@ -759,4 +787,3 @@ export const EventHistorySlide = () => {
     </div>
   );
 };
-
