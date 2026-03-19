@@ -16,8 +16,8 @@ export const DemoFooter = () => {
   const isCurrentCompleted = completedSteps.has(current.id);
   const isLastStep = !next;
 
-  const nextLabel = isLastStep ? "Back to Overview" : `Next: ${next.title}`;
-  const nextPath = isLastStep ? "/" : next.path;
+  const nextLabel = isLastStep ? "Get Started" : `Next: ${next.title}`;
+  const nextPath = isLastStep ? "/get-started" : next.path;
 
   return (
     <nav className="fixed bottom-2 left-0 right-0 z-50 bg-background/80 backdrop-blur-md">

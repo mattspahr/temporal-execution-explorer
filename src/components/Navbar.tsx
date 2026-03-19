@@ -11,13 +11,12 @@ const links = [
 export const Navbar = () => {
   return (
     <nav className="sticky top-0 z-50 border-b border-slide-border bg-background/80 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-6 flex items-center h-12 gap-8">
-        <Link to="/" className="text-sm font-semibold tracking-tight text-foreground whitespace-nowrap hover:opacity-80 transition-opacity">
-          <span className="text-temporal-purple">Temporal</span>{" "}
-          <span className="text-muted-foreground font-normal">Workflow Demos</span>
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center h-11 lg:h-12 gap-3 sm:gap-8 overflow-x-auto">
+        <Link to="/" className="text-xs sm:text-sm font-semibold tracking-tight text-foreground whitespace-nowrap hover:opacity-80 transition-opacity">
+          <span className="text-muted-foreground font-normal">Temporal Workflow Demos</span>
         </Link>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 sm:gap-1">
           {links.map(({ to, label }) => (
             <NavLink
               key={to}
@@ -26,7 +25,7 @@ export const Navbar = () => {
             >
               {({ isActive }) => (
                 <motion.div
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  className={`px-2 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                     isActive
                       ? "text-foreground"
                       : "text-muted-foreground hover:text-foreground"
@@ -38,7 +37,7 @@ export const Navbar = () => {
                   {isActive && (
                     <motion.div
                       layoutId="navbar-indicator"
-                      className="absolute bottom-0 left-3 right-3 h-0.5 bg-temporal-purple rounded-full"
+                      className="absolute bottom-0 left-2 right-2 sm:left-3 sm:right-3 h-0.5 bg-temporal-purple rounded-full"
                       transition={{ type: "spring", stiffness: 500, damping: 30 }}
                     />
                   )}

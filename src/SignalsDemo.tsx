@@ -344,37 +344,115 @@ export const SignalsDemoSlide = () => {
   const workerStatus = getWorkerStatus();
 
   return (
-    <div className="slide-content !px-8 !pt-6">
+    <div className="slide-content">
       <div className="w-full max-w-7xl flex flex-col h-full">
         {/* Header */}
-        <div className="text-center mb-6">
-          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-2">
+        <div className="text-center mb-3 lg:mb-6">
+          <h2 className="text-xl sm:text-2xl lg:text-4xl font-semibold tracking-tight text-foreground mb-1 lg:mb-2">
             What if your workflow needs <span className="gradient-text">human approval</span>?
           </h2>
-          <p className="text-muted-foreground text-base max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-sm lg:text-base max-w-2xl mx-auto">
             Temporal workflows can pause for external signals — minutes, hours, or days — without consuming resources.
           </p>
         </div>
 
+        {/* Action Buttons */}
+        <div className="mb-3 lg:mb-4 flex items-center gap-2 lg:gap-3 overflow-x-auto scrollbar-hide">
+          <motion.button
+            onClick={() => {
+              if (isPlaying) {
+                setIsPlaying(false);
+              } else {
+                setIsPlaying(true);
+              }
+            }}
+            disabled={completed || waitingForSignal}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="shrink-0 flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg bg-primary text-primary-foreground text-xs lg:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isPlaying ? <Pause className="w-3.5 h-3.5 lg:w-4 lg:h-4" /> : <Play className="w-3.5 h-3.5 lg:w-4 lg:h-4" />}
+            {isPlaying ? "Pause" : "Play"}
+          </motion.button>
+
+          <motion.button
+            onClick={() => {
+              addNextEvent(true);
+            }}
+            disabled={isPlaying || completed || waitingForSignal}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="shrink-0 flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg bg-secondary text-secondary-foreground text-xs lg:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <SkipForward className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <span className="hidden sm:inline">Step</span>
+          </motion.button>
+
+          <div className="w-px h-6 bg-slide-border mx-1 hidden sm:block" />
+
+          {/* Send Approval Signal Button */}
+          <AnimatePresence>
+            {waitingForSignal && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{
+                  opacity: 1,
+                  scale: [1, 1.05, 1],
+                  boxShadow: [
+                    "0 0 0px rgba(232,69,147,0)",
+                    "0 0 12px rgba(232,69,147,0.4)",
+                    "0 0 0px rgba(232,69,147,0)",
+                  ],
+                }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{
+                  opacity: { duration: 0.2 },
+                  scale: { duration: 1.5, repeat: Infinity, ease: "easeInOut" },
+                  boxShadow: { duration: 1.5, repeat: Infinity, ease: "easeInOut" },
+                }}
+                onClick={handleSendSignal}
+                whileTap={{ scale: 0.95 }}
+                className="shrink-0 flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg bg-temporal-pink/20 text-temporal-pink border border-temporal-pink/30 text-xs lg:text-sm font-medium"
+              >
+                <Send className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+                <span className="hidden sm:inline">Send Approval Signal</span>
+                <span className="sm:hidden">Send Signal</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          <div className="flex-1" />
+
+          <motion.button
+            onClick={reset}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="shrink-0 flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg bg-secondary text-secondary-foreground text-xs lg:text-sm font-medium"
+          >
+            <RotateCcw className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <span className="hidden sm:inline">Reset</span>
+          </motion.button>
+        </div>
+
         {/* Worker Status Strip */}
         <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider mb-1 block">Your infrastructure</span>
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 lg:mb-4">
           <motion.div
-            className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border transition-colors duration-400 ${
+            className={`flex items-center gap-2 lg:gap-2.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg border transition-colors duration-400 ${
               workerStatus === "running" || workerStatus === "completed"
                 ? 'bg-temporal-green/10 border-temporal-green/30'
                 : 'bg-secondary/50 border-slide-border'
             }`}
           >
-            <Server className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Worker 1</span>
+            <Server className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-muted-foreground" />
+            <span className="text-xs lg:text-sm font-medium text-foreground">Worker 1</span>
             {workerStatus === "completed" ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+              <span className="flex items-center gap-1 lg:gap-1.5 text-[10px] lg:text-xs font-semibold px-1.5 lg:px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
                 <CheckCircle2 className="w-3 h-3" />
                 COMPLETED
               </span>
             ) : workerStatus === "running" ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+              <span className="flex items-center gap-1 lg:gap-1.5 text-[10px] lg:text-xs font-semibold px-1.5 lg:px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
                 <motion.span
                   className="w-1.5 h-1.5 rounded-full bg-temporal-green"
                   animate={{ opacity: [1, 0.3, 1] }}
@@ -383,14 +461,14 @@ export const SignalsDemoSlide = () => {
                 RUNNING
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-slide-border">
+              <span className="flex items-center gap-1 lg:gap-1.5 text-[10px] lg:text-xs font-semibold px-1.5 lg:px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-slide-border">
                 <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
                 IDLE
               </span>
             )}
           </motion.div>
 
-          {/* Waiting for signal badge — shown next to worker to emphasize it's Temporal holding state, not the worker */}
+          {/* Waiting for signal badge */}
           <AnimatePresence>
             {waitingForSignal && (
               <motion.div
@@ -407,7 +485,7 @@ export const SignalsDemoSlide = () => {
                 <span className="text-xs font-semibold text-temporal-pink">
                   Durable wait — no compute used
                 </span>
-                <span className="text-[10px] text-temporal-pink/70">
+                <span className="text-[10px] text-temporal-pink/70 hidden sm:inline">
                   (workflow paused on signal)
                 </span>
               </motion.div>
@@ -415,22 +493,23 @@ export const SignalsDemoSlide = () => {
           </AnimatePresence>
         </div>
 
-        {/* Two Column Layout */}
-        <div className="flex gap-4 flex-1 min-h-0">
-          {/* Left Column - Code (55%) */}
-          <div className="w-[55%] flex flex-col">
+        {/* Two Column Layout — stacks on mobile */}
+        <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
+          {/* Left Column - Code */}
+          <div className="w-full lg:w-[55%] flex flex-col min-h-[250px] sm:min-h-[300px] lg:min-h-0">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
                 Workflow code
               </span>
             </div>
 
+            {/* SDK Tabs — above code block */}
             <div className="flex items-center gap-1 mb-2">
               {sdkOrder.map(sdk => (
                 <button
                   key={sdk}
                   onClick={() => { setActiveSDK(sdk); reset(); }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  className={`px-2 lg:px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     activeSDK === sdk
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-secondary'
@@ -446,10 +525,10 @@ export const SignalsDemoSlide = () => {
                 <div className="w-3 h-3 rounded-full bg-destructive/60" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
                 <div className="w-3 h-3 rounded-full bg-temporal-green/60" />
-                <span className="ml-4 text-xs text-muted-foreground font-mono">{sdkDefinitions[activeSDK].filename}</span>
+                <span className="ml-4 text-xs text-muted-foreground font-mono truncate">{sdkDefinitions[activeSDK].filename}</span>
               </div>
 
-              <pre className="mt-8 text-sm leading-relaxed">
+              <pre className="mt-8 text-xs sm:text-sm leading-relaxed">
                 <code>
                   {activeCodeLines.map((item, idx) => {
                     const isHighlighted = item.activity && item.activity === highlightedActivity && !waitingForSignal;
@@ -480,7 +559,7 @@ export const SignalsDemoSlide = () => {
                               : { duration: 0.2 }
                         }
                       >
-                        <span className="text-muted-foreground/50 select-none inline-block w-6 text-right mr-4 text-xs">
+                        <span className="text-muted-foreground/50 select-none inline-block w-4 lg:w-6 text-right mr-1.5 lg:mr-4 text-[10px] lg:text-xs">
                           {idx + 1}
                         </span>
                         {highlightCode(item.line, activeSDK)}
@@ -492,8 +571,8 @@ export const SignalsDemoSlide = () => {
             </div>
           </div>
 
-          {/* Center Divider with Callouts */}
-          <div className="w-px bg-slide-border relative">
+          {/* Center Divider — hidden on mobile, callouts inside */}
+          <div className="hidden lg:block w-px bg-slide-border relative">
             {/* Waiting Callout */}
             <AnimatePresence>
               {showWaitingCallout && (
@@ -532,8 +611,40 @@ export const SignalsDemoSlide = () => {
             </AnimatePresence>
           </div>
 
-          {/* Right Column - Events (45%) */}
-          <div className="w-[45%] flex flex-col">
+          {/* Mobile-only inline callout block */}
+          <AnimatePresence>
+            {(showWaitingCallout || showReceivedCallout) && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="lg:hidden p-3 rounded-xl bg-slide-surface shadow-xl"
+              >
+                {showWaitingCallout && (
+                  <div className="border border-temporal-pink/30 rounded-xl p-3">
+                    <h4 className="font-semibold text-temporal-pink mb-1 text-center text-sm">Waiting for Signal</h4>
+                    <p className="text-xs text-muted-foreground text-center">
+                      The workflow is paused on <code className="text-temporal-pink">condition()</code>, consuming no resources. It could wait minutes, hours, or days.
+                    </p>
+                  </div>
+                )}
+                {showReceivedCallout && (
+                  <div className="border border-temporal-green/30 rounded-xl p-3">
+                    <div className="flex items-center gap-2 justify-center">
+                      <CheckCircle2 className="w-4 h-4 text-temporal-green" />
+                      <h4 className="font-semibold text-temporal-green text-sm">Signal received!</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 text-center">
+                      Approval granted. Workflow resumes execution.
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Right Column - Events */}
+          <div className="w-full lg:w-[45%] flex flex-col min-h-[200px] sm:min-h-[250px] lg:min-h-0">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider">Temporal Cloud</span>
             </div>
@@ -554,7 +665,7 @@ export const SignalsDemoSlide = () => {
             </div>
 
             <div className="flex-1 rounded-xl bg-slide-surface border border-slide-border overflow-hidden">
-              <div className="h-full overflow-auto p-3 space-y-1.5">
+              <div className="h-full overflow-auto p-2 lg:p-3 space-y-1 lg:space-y-1.5">
                 {visibleEvents.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-muted-foreground/50 text-sm italic">
                     Events will appear as execution progresses
@@ -698,7 +809,7 @@ export const SignalsDemoSlide = () => {
                       Workflow blocked — waiting for approval signal
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-1">
-                      Click "Send Approval Signal" to continue
+                      Click "Send Signal" to continue
                     </p>
                   </motion.div>
                 )}
@@ -707,82 +818,6 @@ export const SignalsDemoSlide = () => {
           </div>
         </div>
 
-        {/* Control Bar */}
-        <div className="mt-4 flex items-center justify-center gap-3">
-          <motion.button
-            onClick={() => {
-              if (isPlaying) {
-                setIsPlaying(false);
-              } else {
-                setIsPlaying(true);
-              }
-            }}
-            disabled={completed || waitingForSignal}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            {isPlaying ? "Pause" : "Play"}
-          </motion.button>
-
-          <motion.button
-            onClick={() => {
-              addNextEvent(true);
-            }}
-            disabled={isPlaying || completed || waitingForSignal}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <SkipForward className="w-4 h-4" />
-            Step
-          </motion.button>
-
-          <div className="w-px h-6 bg-slide-border mx-2" />
-
-          {/* Send Approval Signal Button */}
-          <AnimatePresence>
-            {waitingForSignal && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{
-                  opacity: 1,
-                  scale: [1, 1.05, 1],
-                  boxShadow: [
-                    "0 0 0px rgba(232,69,147,0)",
-                    "0 0 12px rgba(232,69,147,0.4)",
-                    "0 0 0px rgba(232,69,147,0)",
-                  ],
-                }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{
-                  opacity: { duration: 0.2 },
-                  scale: { duration: 1.5, repeat: Infinity, ease: "easeInOut" },
-                  boxShadow: { duration: 1.5, repeat: Infinity, ease: "easeInOut" },
-                }}
-                onClick={handleSendSignal}
-                whileTap={{ scale: 0.95 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-temporal-pink/20 text-temporal-pink border border-temporal-pink/30 text-sm font-medium"
-              >
-                <Send className="w-4 h-4" />
-                Send Approval Signal
-              </motion.button>
-            )}
-          </AnimatePresence>
-
-          {!waitingForSignal && <div className="w-px h-6 bg-slide-border mx-2" />}
-
-          <motion.button
-            onClick={reset}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset
-          </motion.button>
-        </div>
       </div>
     </div>
   );

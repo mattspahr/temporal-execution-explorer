@@ -1,0 +1,15 @@
+I built an interactive demo to visualize how Temporal handles worker crash recovery.
+
+It walks through a checkout workflow — chargeCard, reserveInventory, shipOrder — executing step by step. Then the worker crashes. A
+new worker spins up, replays from the event history, and picks up exactly where it left off.
+
+What I like about building it this way:
+  - You can step through each event manually or watch it auto-play
+  - Switch between TypeScript, Go, Python, and Java to see the same workflow in each SDK
+  - The event history panel shows exactly what Temporal persists and what gets replayed
+
+There aren't any workflows running. This is purely a frontend visualization of the mechanics. 
+
+If you're exploring Temporal or curious how teams are using it in production, happy to chat — feel free to reach out.
+
+Also, Replay (Temporal's annual conference) is coming up this May — discount code link in the comments along with the live demo.

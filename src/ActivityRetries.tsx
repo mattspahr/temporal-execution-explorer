@@ -381,37 +381,100 @@ export const ActivityRetriesSlide = () => {
   };
 
   return (
-    <div className="slide-content !px-8 !pt-6">
+    <div className="slide-content">
       <div className="w-full max-w-7xl flex flex-col h-full">
         {/* Header */}
-        <div className="text-center mb-6">
-          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-2">
+        <div className="text-center mb-3 lg:mb-6">
+          <h2 className="text-xl sm:text-2xl lg:text-4xl font-semibold tracking-tight text-foreground mb-1 lg:mb-2">
             What happens when an API is <span className="gradient-text">flaky</span>?
           </h2>
-          <p className="text-muted-foreground text-base max-w-2xl mx-auto">
+          <p className="text-muted-foreground text-sm lg:text-base max-w-2xl mx-auto">
             Temporal retries failed activities with exponential backoff by default.
           </p>
         </div>
 
+        {/* Action Buttons */}
+        <div className="mb-3 lg:mb-4 flex items-center gap-2 lg:gap-3 overflow-x-auto scrollbar-hide">
+          <motion.button
+            onClick={() => {
+              if (isPlaying) {
+                setIsPlaying(false);
+              } else {
+                if (retryPaused) {
+                  if (backoffTimerRef.current) {
+                    clearInterval(backoffTimerRef.current);
+                    backoffTimerRef.current = null;
+                  }
+                  setRetryPaused(false);
+                  setFailedLineFlash(false);
+                  setBackoffCountdown(0);
+                }
+                setIsPlaying(true);
+              }
+            }}
+            disabled={completed}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="shrink-0 flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg bg-primary text-primary-foreground text-xs lg:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isPlaying ? <Pause className="w-3.5 h-3.5 lg:w-4 lg:h-4" /> : <Play className="w-3.5 h-3.5 lg:w-4 lg:h-4" />}
+            {isPlaying ? "Pause" : "Play"}
+          </motion.button>
+
+          <motion.button
+            onClick={() => {
+              if (retryPaused) {
+                if (backoffTimerRef.current) {
+                  clearInterval(backoffTimerRef.current);
+                  backoffTimerRef.current = null;
+                }
+                setRetryPaused(false);
+                setFailedLineFlash(false);
+                setBackoffCountdown(0);
+              }
+              addNextEvent(true);
+            }}
+            disabled={isPlaying || completed}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="shrink-0 flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg bg-secondary text-secondary-foreground text-xs lg:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <SkipForward className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <span className="hidden sm:inline">Step</span>
+          </motion.button>
+
+          <div className="flex-1" />
+
+          <motion.button
+            onClick={reset}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="shrink-0 flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg bg-secondary text-secondary-foreground text-xs lg:text-sm font-medium"
+          >
+            <RotateCcw className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+            <span className="hidden sm:inline">Reset</span>
+          </motion.button>
+        </div>
+
         {/* Worker Status Strip */}
         <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider mb-1 block">Your infrastructure</span>
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3 mb-3 lg:mb-4">
           <motion.div
-            className={`flex items-center gap-2.5 px-4 py-2 rounded-lg border transition-colors duration-400 ${
+            className={`flex items-center gap-2 lg:gap-2.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg border transition-colors duration-400 ${
               visibleEvents.length > 0 && !completed
                 ? 'bg-temporal-green/10 border-temporal-green/30'
                 : 'bg-secondary/50 border-slide-border'
             }`}
           >
-            <Server className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Worker 1</span>
+            <Server className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-muted-foreground" />
+            <span className="text-xs lg:text-sm font-medium text-foreground">Worker 1</span>
             {completed ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+              <span className="flex items-center gap-1 lg:gap-1.5 text-[10px] lg:text-xs font-semibold px-1.5 lg:px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
                 <CheckCircle2 className="w-3 h-3" />
                 COMPLETED
               </span>
             ) : visibleEvents.length > 0 ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
+              <span className="flex items-center gap-1 lg:gap-1.5 text-[10px] lg:text-xs font-semibold px-1.5 lg:px-2 py-0.5 rounded-full bg-temporal-green/20 text-temporal-green border border-temporal-green/30">
                 <motion.span
                   className="w-1.5 h-1.5 rounded-full bg-temporal-green"
                   animate={{ opacity: [1, 0.3, 1] }}
@@ -420,7 +483,7 @@ export const ActivityRetriesSlide = () => {
                 RUNNING
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-slide-border">
+              <span className="flex items-center gap-1 lg:gap-1.5 text-[10px] lg:text-xs font-semibold px-1.5 lg:px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-slide-border">
                 <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" />
                 IDLE
               </span>
@@ -451,10 +514,10 @@ export const ActivityRetriesSlide = () => {
           </AnimatePresence>
         </div>
 
-        {/* Two Column Layout */}
-        <div className="flex gap-4 flex-1 min-h-0">
+        {/* Two Column Layout — stacks on mobile */}
+        <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
           {/* Left Column - Code (55%) */}
-          <div className="w-[55%] flex flex-col">
+          <div className="w-full lg:w-[55%] flex flex-col min-h-[250px] sm:min-h-[300px] lg:min-h-0">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
                 Workflow code
@@ -466,7 +529,7 @@ export const ActivityRetriesSlide = () => {
                 <button
                   key={sdk}
                   onClick={() => { setActiveSDK(sdk); reset(); }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  className={`px-2 lg:px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     activeSDK === sdk
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-secondary'
@@ -482,10 +545,10 @@ export const ActivityRetriesSlide = () => {
                 <div className="w-3 h-3 rounded-full bg-destructive/60" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
                 <div className="w-3 h-3 rounded-full bg-temporal-green/60" />
-                <span className="ml-4 text-xs text-muted-foreground font-mono">{sdkDefinitions[activeSDK].filename}</span>
+                <span className="ml-4 text-xs text-muted-foreground font-mono truncate">{sdkDefinitions[activeSDK].filename}</span>
               </div>
 
-              <pre className="mt-8 text-sm leading-relaxed">
+              <pre className="mt-8 text-xs sm:text-sm leading-relaxed">
                 <code>
                   {activeCodeLines.map((item, idx) => {
                     const isHighlighted = item.activity && item.activity === highlightedActivity && !failedLineFlash && !successLineFlash;
@@ -523,7 +586,7 @@ export const ActivityRetriesSlide = () => {
                                 : { duration: 0.2 }
                         }
                       >
-                        <span className="text-muted-foreground/50 select-none inline-block w-6 text-right mr-4 text-xs">
+                        <span className="text-muted-foreground/50 select-none inline-block w-4 lg:w-6 text-right mr-1.5 lg:mr-4 text-[10px] lg:text-xs">
                           {idx + 1}
                         </span>
                         {highlightCode(item.line, activeSDK)}
@@ -535,8 +598,8 @@ export const ActivityRetriesSlide = () => {
             </div>
           </div>
 
-          {/* Center Divider with Callouts */}
-          <div className="w-px bg-slide-border relative">
+          {/* Center Divider — hidden on mobile */}
+          <div className="hidden lg:block w-px bg-slide-border relative">
             {/* Retry Policy Callout */}
             <AnimatePresence>
               {showRetryCallout && (
@@ -600,8 +663,56 @@ export const ActivityRetriesSlide = () => {
             </AnimatePresence>
           </div>
 
+          {/* Mobile Retry Policy Callout — shown inline on mobile only */}
+          <AnimatePresence>
+            {showRetryCallout && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="lg:hidden p-3 rounded-xl bg-slide-surface border border-temporal-orange/30 shadow-xl"
+              >
+                <h4 className="font-semibold text-temporal-orange mb-2 text-center text-sm">Retry Policy</h4>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">initialInterval</span>
+                    <span className="font-mono text-foreground">1s</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">backoffCoefficient</span>
+                    <span className="font-mono text-foreground">2</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">maximumAttempts</span>
+                    <span className="font-mono text-foreground">5</span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Mobile Success Callout — shown inline on mobile only */}
+          <AnimatePresence>
+            {showSuccessCallout && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="lg:hidden p-3 rounded-xl bg-slide-surface border border-temporal-green/30 shadow-xl"
+              >
+                <div className="flex items-center gap-2 justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-temporal-green" />
+                  <h4 className="font-semibold text-temporal-green text-sm">Activity recovered!</h4>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 text-center">
+                  chargeCard succeeded on attempt 3. Workflow continues.
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Right Column - Events (45%) */}
-          <div className="w-[45%] flex flex-col">
+          <div className="w-full lg:w-[45%] flex flex-col min-h-[200px] sm:min-h-[250px] lg:min-h-0">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider">Temporal Cloud</span>
             </div>
@@ -622,7 +733,7 @@ export const ActivityRetriesSlide = () => {
             </div>
 
             <div className="flex-1 rounded-xl bg-slide-surface border border-slide-border overflow-hidden">
-              <div className="h-full overflow-auto p-3 space-y-1.5">
+              <div className="h-full overflow-auto p-2 lg:p-3 space-y-1 lg:space-y-1.5">
                 {visibleEvents.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-muted-foreground/50 text-sm italic">
                     Events will appear as execution progresses
@@ -808,68 +919,6 @@ export const ActivityRetriesSlide = () => {
           </div>
         </div>
 
-        {/* Control Bar */}
-        <div className="mt-4 flex items-center justify-center gap-3">
-          <motion.button
-            onClick={() => {
-              if (isPlaying) {
-                setIsPlaying(false);
-              } else {
-                if (retryPaused) {
-                  if (backoffTimerRef.current) {
-                    clearInterval(backoffTimerRef.current);
-                    backoffTimerRef.current = null;
-                  }
-                  setRetryPaused(false);
-                  setFailedLineFlash(false);
-                  setBackoffCountdown(0);
-                }
-                setIsPlaying(true);
-              }
-            }}
-            disabled={completed}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            {isPlaying ? "Pause" : "Play"}
-          </motion.button>
-
-          <motion.button
-            onClick={() => {
-              if (retryPaused) {
-                if (backoffTimerRef.current) {
-                  clearInterval(backoffTimerRef.current);
-                  backoffTimerRef.current = null;
-                }
-                setRetryPaused(false);
-                setFailedLineFlash(false);
-                setBackoffCountdown(0);
-              }
-              addNextEvent(true);
-            }}
-            disabled={isPlaying || completed}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <SkipForward className="w-4 h-4" />
-            Step
-          </motion.button>
-
-          <div className="w-px h-6 bg-slide-border mx-2" />
-
-          <motion.button
-            onClick={reset}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium"
-          >
-            <RotateCcw className="w-4 h-4" />
-            Reset
-          </motion.button>
-        </div>
       </div>
     </div>
   );

@@ -21,8 +21,7 @@ export const LandingPage = () => {
         className="text-center max-w-3xl mx-auto mb-16"
       >
         <div className="mb-6">
-          <span className="text-temporal-purple text-lg font-semibold tracking-tight">Temporal</span>{" "}
-          <span className="text-muted-foreground text-lg font-normal">Workflow Demos</span>
+          <span className="text-muted-foreground text-lg font-normal">Temporal Workflow Demos</span>
         </div>
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4 leading-tight">
           See how Temporal keeps your workflows running — no matter what

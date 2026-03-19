@@ -1,0 +1,14 @@
+I built an interactive demo to visualize how Temporal handles activity retries with exponential backoff.
+
+It walks through a checkout workflow where chargeCard fails twice — payment gateway timeout — then succeeds on the third attempt. You can watch the retry policy kick in, the backoff timer count down, and the workflow continue like nothing happened.
+
+What I like about building it this way:
+  - You can step through each retry manually or watch the backoff play out in real time
+  - Switch between TypeScript, Go, Python, and Java to see how each SDK configures retry policies
+  - The event history panel shows every failed attempt alongside the successful one
+
+There aren't any workflows running. This is purely a frontend visualization of the mechanics.
+
+If you're exploring Temporal or curious how teams are using it in production, happy to chat — feel free to reach out.
+
+Also, Replay (Temporal's annual conference) is coming up this May — discount code link in the comments along with the live demo.

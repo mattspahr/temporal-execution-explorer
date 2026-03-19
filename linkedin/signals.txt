@@ -1,0 +1,14 @@
+I built an interactive demo to visualize how Temporal handles workflow signals for human-in-the-loop approvals.
+
+It walks through a checkout workflow that pauses after charging the card and waits for an external approval signal. The workflow just sits there — minutes, hours, days — consuming zero resources. When the signal arrives, it picks up and finishes the remaining steps.
+
+What I like about building it this way:
+  - You can see the workflow pause on the signal line and the worker go idle
+  - Click "Send Approval Signal" yourself to unblock the workflow
+  - Switch between TypeScript, Go, Python, and Java to see how each SDK implements signals and conditions
+
+There aren't any workflows running. This is purely a frontend visualization of the mechanics.
+
+If you're exploring Temporal or curious how teams are using it in production, happy to chat — feel free to reach out.
+
+Also, Replay (Temporal's annual conference) is coming up this May — discount code link in the comments along with the live demo.

@@ -68,7 +68,7 @@
 }
 
 .slide-content {
-  @apply flex items-center justify-center h-[calc(100vh-6rem)] px-8 py-6 overflow-hidden;
+  @apply flex items-center justify-center min-h-[calc(100vh-3rem)] lg:h-[calc(100vh-3rem)] px-3 sm:px-6 lg:px-8 py-4 lg:py-6 overflow-auto lg:overflow-hidden;
 }
 
 .code-block {
@@ -77,4 +77,12 @@
 
 .gradient-text {
   @apply text-temporal-purple;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
