@@ -2,7 +2,7 @@
 
 An interactive visualization that demonstrates how Temporal handles worker crashes and recovers using deterministic replay. Built for presentations, demos, and educational content about Temporal's execution model.
 
-https://github.com/user-attachments/assets/8087112a-d50b-4c36-b6a2-3436e468cc3e
+https://github.com/user-attachments/assets/d82304f5-c6b4-409c-82d3-dec8db941d43
 
 ## What it shows
 
