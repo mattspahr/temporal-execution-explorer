@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, SkipForward, RotateCcw, CheckCircle2, ChevronRight, ChevronDown, Server, Send } from "lucide-react";
+import { Play, Pause, SkipForward, RotateCcw, CheckCircle2, ChevronRight, ChevronDown, Server, Send, ArrowRight } from "lucide-react";
 import {
   type SdkKey,
   type SdkDefinition,
@@ -205,8 +205,11 @@ export const SignalsDemoSlide = () => {
   // Signal-specific state
   const [waitingForSignal, setWaitingForSignal] = useState(false);
   const [signalReceived, setSignalReceived] = useState(false);
-  const [showWaitingCallout, setShowWaitingCallout] = useState(false);
-  const [showReceivedCallout, setShowReceivedCallout] = useState(false);
+
+
+  const [narrativeStep, setNarrativeStep] = useState<string | null>(null);
+  const narrativeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const eventsScrollRef = useRef<HTMLDivElement>(null);
 
   const hasAutoPlayed = useRef(false);
   const wasPlayingRef = useRef(false);
@@ -223,8 +226,8 @@ export const SignalsDemoSlide = () => {
     setDisplayItemCursor(0);
     setWaitingForSignal(false);
     setSignalReceived(false);
-    setShowWaitingCallout(false);
-    setShowReceivedCallout(false);
+    setNarrativeStep(null);
+    if (narrativeTimerRef.current) clearTimeout(narrativeTimerRef.current);
     hasAutoPlayed.current = false;
     wasPlayingRef.current = false;
   }, []);
@@ -237,7 +240,6 @@ export const SignalsDemoSlide = () => {
       if (!waitingForSignal) {
         wasPlayingRef.current = !stepMode;
         setWaitingForSignal(true);
-        setShowWaitingCallout(true);
         setIsPlaying(false);
       }
       return false;
@@ -273,8 +275,6 @@ export const SignalsDemoSlide = () => {
 
     setWaitingForSignal(false);
     setSignalReceived(true);
-    setShowWaitingCallout(false);
-    setShowReceivedCallout(true);
 
     // Add the signal event
     const item = displayItems[SIGNAL_PAUSE_INDEX];
@@ -283,8 +283,6 @@ export const SignalsDemoSlide = () => {
       setSelectedEvent(item.eventIndex);
     }
     setDisplayItemCursor(SIGNAL_PAUSE_INDEX + 1);
-
-    setTimeout(() => setShowReceivedCallout(false), 2000);
 
     // Resume if was auto-playing
     if (wasPlayingRef.current) {
@@ -318,6 +316,37 @@ export const SignalsDemoSlide = () => {
 
     return () => clearInterval(interval);
   }, [isPlaying, addNextEvent]);
+
+  // Narrative pill helper
+  const showNarrative = useCallback((step: string, duration = 5000) => {
+    if (narrativeTimerRef.current) clearTimeout(narrativeTimerRef.current);
+    setNarrativeStep(step);
+    narrativeTimerRef.current = setTimeout(() => setNarrativeStep(null), duration);
+  }, []);
+
+  // Beat 1: Durable wait begins
+  useEffect(() => {
+    if (waitingForSignal) {
+      showNarrative("durable-wait", 6000);
+    }
+  }, [waitingForSignal, showNarrative]);
+
+  // Beat 2: Signal received
+  useEffect(() => {
+    if (signalReceived) {
+      showNarrative("signal-received");
+    }
+  }, [signalReceived, showNarrative]);
+
+  // Auto-scroll event history
+  useEffect(() => {
+    const el = eventsScrollRef.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      });
+    }
+  }, [visibleEvents]);
 
   const highlightedActivity = selectedEvent !== null ? allEvents[selectedEvent]?.activity || null : null;
   const visibleSet = new Set(visibleEvents);
@@ -496,7 +525,7 @@ export const SignalsDemoSlide = () => {
         {/* Two Column Layout — stacks on mobile */}
         <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
           {/* Left Column - Code */}
-          <div className="w-full lg:w-[55%] flex flex-col min-h-[250px] sm:min-h-[300px] lg:min-h-0">
+          <motion.div animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="w-full lg:w-[55%] flex flex-col min-h-[250px] sm:min-h-[300px] lg:min-h-0">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
                 Workflow code
@@ -569,82 +598,86 @@ export const SignalsDemoSlide = () => {
                 </code>
               </pre>
             </div>
-          </div>
+          </motion.div>
 
           {/* Center Divider — hidden on mobile, callouts inside */}
           <div className="hidden lg:block w-px bg-slide-border relative">
-            {/* Waiting Callout */}
+            {/* Activity arrow connector */}
             <AnimatePresence>
-              {showWaitingCallout && (
+              {highlightedActivity && isPlaying && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  key={highlightedActivity}
+                  initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-temporal-pink/30 shadow-xl"
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center gap-1"
                 >
-                  <h4 className="font-semibold text-temporal-pink mb-2 text-center text-sm">Waiting for Signal</h4>
-                  <p className="text-xs text-muted-foreground text-center">
-                    The workflow is paused on <code className="text-temporal-pink">condition()</code>, consuming no resources. It could wait minutes, hours, or days.
-                  </p>
+                  <motion.div
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-temporal-green/20 border border-temporal-green/40 shadow-[0_0_12px_rgba(34,197,94,0.3)]"
+                    animate={{ x: [0, 3, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <ArrowRight className="w-3.5 h-3.5 text-temporal-green" />
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Received Callout */}
-            <AnimatePresence>
-              {showReceivedCallout && (
+            {/* Narrative pills */}
+            <AnimatePresence mode="wait">
+              {narrativeStep && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-56 p-4 rounded-xl bg-slide-surface border border-temporal-green/30 shadow-xl"
+                  key={narrativeStep}
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute top-[62%] left-1/2 -translate-x-1/2 z-20 w-56 pointer-events-none"
                 >
-                  <div className="flex items-center gap-2 justify-center">
-                    <CheckCircle2 className="w-5 h-5 text-temporal-green" />
-                    <h4 className="font-semibold text-temporal-green text-sm">Signal received!</h4>
+                  <div className={`px-3 py-2.5 rounded-xl border text-center text-xs leading-relaxed shadow-lg backdrop-blur-sm ${
+                    narrativeStep === "durable-wait"
+                      ? "bg-temporal-pink/10 border-temporal-pink/30 text-temporal-pink"
+                      : "bg-temporal-green/10 border-temporal-green/30 text-temporal-green"
+                  }`}>
+                    {narrativeStep === "durable-wait" && (
+                      <span>Workflow paused — <strong>no compute used</strong> until signal arrives</span>
+                    )}
+                    {narrativeStep === "signal-received" && (
+                      <span>Signal received — workflow <strong>resumes instantly</strong></span>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Approval granted. Workflow resumes execution.
-                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
           {/* Mobile-only inline callout block */}
-          <AnimatePresence>
-            {(showWaitingCallout || showReceivedCallout) && (
+          <AnimatePresence mode="wait">
+            {narrativeStep && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="lg:hidden p-3 rounded-xl bg-slide-surface shadow-xl"
+                key={`mobile-${narrativeStep}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className={`lg:hidden px-3 py-2.5 rounded-xl border text-center text-xs leading-relaxed ${
+                  narrativeStep === "durable-wait"
+                    ? "bg-temporal-pink/10 border-temporal-pink/30 text-temporal-pink"
+                    : "bg-temporal-green/10 border-temporal-green/30 text-temporal-green"
+                }`}
               >
-                {showWaitingCallout && (
-                  <div className="border border-temporal-pink/30 rounded-xl p-3">
-                    <h4 className="font-semibold text-temporal-pink mb-1 text-center text-sm">Waiting for Signal</h4>
-                    <p className="text-xs text-muted-foreground text-center">
-                      The workflow is paused on <code className="text-temporal-pink">condition()</code>, consuming no resources. It could wait minutes, hours, or days.
-                    </p>
-                  </div>
+                {narrativeStep === "durable-wait" && (
+                  <span>Workflow paused — <strong>no compute used</strong> until signal arrives</span>
                 )}
-                {showReceivedCallout && (
-                  <div className="border border-temporal-green/30 rounded-xl p-3">
-                    <div className="flex items-center gap-2 justify-center">
-                      <CheckCircle2 className="w-4 h-4 text-temporal-green" />
-                      <h4 className="font-semibold text-temporal-green text-sm">Signal received!</h4>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 text-center">
-                      Approval granted. Workflow resumes execution.
-                    </p>
-                  </div>
+                {narrativeStep === "signal-received" && (
+                  <span>Signal received — workflow <strong>resumes instantly</strong></span>
                 )}
               </motion.div>
             )}
           </AnimatePresence>
 
           {/* Right Column - Events */}
-          <div className="w-full lg:w-[45%] flex flex-col min-h-[200px] sm:min-h-[250px] lg:min-h-0">
+          <motion.div animate={{ opacity: waitingForSignal ? 0.4 : 1 }} transition={{ duration: 0.5 }} className="w-full lg:w-[45%] flex flex-col min-h-[200px] sm:min-h-[250px] lg:min-h-0">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider">Temporal Cloud</span>
             </div>
@@ -665,7 +698,7 @@ export const SignalsDemoSlide = () => {
             </div>
 
             <div className="flex-1 rounded-xl bg-slide-surface border border-slide-border overflow-hidden">
-              <div className="h-full overflow-auto p-2 lg:p-3 space-y-1 lg:space-y-1.5">
+              <div ref={eventsScrollRef} className="h-full overflow-auto p-2 pb-4 lg:p-3 lg:pb-6 space-y-1 lg:space-y-1.5">
                 {visibleEvents.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-muted-foreground/50 text-sm italic">
                     Events will appear as execution progresses
@@ -815,7 +848,7 @@ export const SignalsDemoSlide = () => {
                 )}
               </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
         </div>
 
       </div>

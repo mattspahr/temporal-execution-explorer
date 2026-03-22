@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, SkipForward, RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown, Server } from "lucide-react";
+import { Play, Pause, SkipForward, RotateCcw, RefreshCw, AlertTriangle, CheckCircle2, ChevronRight, ChevronDown, Server, ArrowRight } from "lucide-react";
 import { type SdkKey, type SdkDefinition, type EventItem, sdkOrder, buildDisplayItems, getEventColor, highlightCode } from "@/lib/shared";
 import { useStepper } from "@/lib/StepperContext";
 
@@ -169,15 +169,19 @@ export const EventHistorySlide = () => {
   const [hasCrashed, setHasCrashed] = useState(false);
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayIndex, setReplayIndex] = useState(0);
-  const [showCallout, setShowCallout] = useState(false);
+
   const [completed, setCompleted] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [displayItemCursor, setDisplayItemCursor] = useState(0);
 
   const [isReplayScanning, setIsReplayScanning] = useState(false);
+  const [narrativeStep, setNarrativeStep] = useState<string | null>(null);
 
   const hasAutoPlayed = useRef(false);
+  const narrativeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasShownFirstActivity = useRef(false);
   const replayChargeCardIndexRef = useRef(0);
+  const eventsScrollRef = useRef<HTMLDivElement>(null);
 
   const activeCodeLines = sdkDefinitions[activeSDK].codeLines;
   const replayStopLineIndex = activeCodeLines.findIndex(item => item.activity === "reserveInventory");
@@ -192,11 +196,14 @@ export const EventHistorySlide = () => {
     setHasCrashed(false);
     setIsReplaying(false);
     setReplayIndex(0);
-    setShowCallout(false);
+
     setCompleted(false);
     setExpandedGroups(new Set());
     setDisplayItemCursor(0);
+    setNarrativeStep(null);
+    if (narrativeTimerRef.current) clearTimeout(narrativeTimerRef.current);
     hasAutoPlayed.current = false;
+    hasShownFirstActivity.current = false;
   }, []);
 
   const addNextEvent = useCallback(() => {
@@ -235,15 +242,46 @@ export const EventHistorySlide = () => {
 
   const startReplay = useCallback(() => {
     setIsReplaying(true);
-    setShowCallout(true);
+
     setReplayIndex(0);
     replayChargeCardIndexRef.current = replayStopLineIndex;
-    setTimeout(() => setShowCallout(false), 3000);
+
     setIsReplayScanning(true);
   }, [replayStopLineIndex]);
 
   useEffect(() => { markVisited("crash-recovery"); }, [markVisited]);
   useEffect(() => { if (completed) markCompleted("crash-recovery"); }, [completed, markCompleted]);
+
+  // Narrative pill helper
+  const showNarrative = useCallback((step: string, duration = 5000) => {
+    if (narrativeTimerRef.current) clearTimeout(narrativeTimerRef.current);
+    setNarrativeStep(step);
+    narrativeTimerRef.current = setTimeout(() => setNarrativeStep(null), duration);
+  }, []);
+
+  // Beat 1: First activity event appears
+  useEffect(() => {
+    if (hasShownFirstActivity.current) return;
+    const hasActivity = visibleEvents.some(idx => allEvents[idx]?.type === "Activity");
+    if (hasActivity) {
+      hasShownFirstActivity.current = true;
+      showNarrative("first-activity");
+    }
+  }, [visibleEvents, showNarrative]);
+
+  // Beat 2: Crash
+  useEffect(() => {
+    if (hasCrashed && !isReplaying) {
+      showNarrative("crash", 6000);
+    }
+  }, [hasCrashed, isReplaying, showNarrative]);
+
+  // Beat 3: Replay starts
+  useEffect(() => {
+    if (isReplayScanning) {
+      showNarrative("replay", 3500);
+    }
+  }, [isReplayScanning, showNarrative]);
 
   // Auto-play on mount with 600ms delay
   useEffect(() => {
@@ -274,7 +312,7 @@ export const EventHistorySlide = () => {
     if (!isReplayScanning) return;
     const interval = setInterval(() => {
       setReplayIndex(prev => prev + 1);
-    }, 300);
+    }, 100);
     return () => clearInterval(interval);
   }, [isReplayScanning]);
 
@@ -282,9 +320,19 @@ export const EventHistorySlide = () => {
   useEffect(() => {
     if (isReplayScanning && replayIndex > replayStopLineIndex) {
       setIsReplayScanning(false);
-      setTimeout(() => setIsPlaying(true), 500);
+      setTimeout(() => setIsPlaying(true), 200);
     }
   }, [isReplayScanning, replayIndex, replayStopLineIndex]);
+
+  // Auto-scroll event history to bottom when new events appear
+  useEffect(() => {
+    const el = eventsScrollRef.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      });
+    }
+  }, [visibleEvents]);
 
   const isAnythingPlaying = isPlaying || isReplayScanning;
 
@@ -470,7 +518,11 @@ export const EventHistorySlide = () => {
         {/* Two Column Layout — stacks on mobile */}
         <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
           {/* Left Column - Code */}
-          <div className="w-full lg:w-[55%] flex flex-col min-h-[250px] sm:min-h-[300px] lg:min-h-0">
+          <motion.div
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="w-full lg:w-[55%] flex flex-col min-h-[250px] sm:min-h-[300px] lg:min-h-0"
+          >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
                 Workflow code {isReplaying && "(replayed)"}
@@ -513,9 +565,17 @@ export const EventHistorySlide = () => {
               <pre className="mt-8 text-xs sm:text-sm leading-relaxed">
                 <code>
                   {activeCodeLines.map((item, idx) => {
-                    const isHighlighted = item.activity && item.activity === highlightedActivity;
-                    const isReplayingLine = isReplaying && replayIndex === idx;
+                    const isCompleteHighlight = completed && item.type === "return" && selectedEvent !== null && allEvents[selectedEvent]?.name === "WorkflowExecutionCompleted";
+                    const isHighlighted = (item.activity && item.activity === highlightedActivity) || isCompleteHighlight;
+                    const isReplayingLine = isReplayScanning && replayIndex === idx;
                     const showHistoryAnnotation = isReplaying && item.activity === "reserveInventory" && replayIndex >= replayChargeCardIndexRef.current;
+
+                    // Match replay highlight color to the event history color for the activity
+                    const replayColor = item.activity
+                      ? { bg: 'bg-temporal-green/30', border: 'border-temporal-green', shadow: 'shadow-[inset_0_0_20px_rgba(34,197,94,0.15)]',
+                          anim: ["hsl(142 71% 45% / 0.2)", "hsl(142 71% 45% / 0.4)", "hsl(142 71% 45% / 0.2)"] }
+                      : { bg: 'bg-temporal-purple/30', border: 'border-temporal-purple', shadow: 'shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]',
+                          anim: ["hsl(263 70% 58% / 0.2)", "hsl(263 70% 58% / 0.4)", "hsl(263 70% 58% / 0.2)"] };
 
                     return (
                       <motion.div
@@ -524,14 +584,14 @@ export const EventHistorySlide = () => {
                           isHighlighted
                             ? 'bg-primary/40 border-primary shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
                             : isReplayingLine
-                              ? 'bg-red-500/30 border-red-500 shadow-[inset_0_0_20px_rgba(239,68,68,0.15)]'
+                              ? `${replayColor.bg} ${replayColor.border} ${replayColor.shadow}`
                               : 'border-transparent'
                         }`}
                         animate={
                           isHighlighted
                             ? { backgroundColor: ["hsl(263 70% 58% / 0.25)", "hsl(263 70% 58% / 0.45)", "hsl(263 70% 58% / 0.25)"] }
                             : isReplayingLine
-                              ? { backgroundColor: ["hsl(0 84% 60% / 0.2)", "hsl(0 84% 60% / 0.4)", "hsl(0 84% 60% / 0.2)"] }
+                              ? { backgroundColor: replayColor.anim }
                               : { backgroundColor: "transparent" }
                         }
                         transition={
@@ -566,62 +626,134 @@ export const EventHistorySlide = () => {
               {/* Crash overlay */}
               {showCrashOverlay && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="absolute bottom-4 left-2 right-2 lg:left-4 lg:right-4 p-2 lg:p-3 rounded-lg bg-slide-surface border border-destructive/30 flex items-center gap-2 lg:gap-3 backdrop-blur-sm shadow-lg z-10"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute inset-0 flex items-center justify-center z-10 bg-black/40 backdrop-blur-[2px] rounded-lg"
                 >
-                  <AlertTriangle className="w-4 h-4 lg:w-5 lg:h-5 text-destructive shrink-0" />
-                  <span className="text-xs lg:text-sm text-destructive">
-                    Worker crashed before next Workflow Task completed
-                  </span>
+                  <div className="flex items-center gap-2 lg:gap-3 px-4 py-3 lg:px-6 lg:py-4 rounded-xl bg-destructive/15 border-2 border-destructive/50 shadow-[0_0_30px_rgba(239,68,68,0.2)]">
+                    <AlertTriangle className="w-5 h-5 lg:w-6 lg:h-6 text-destructive shrink-0" />
+                    <span className="text-sm lg:text-base font-semibold text-destructive">
+                      Worker crashed before next Workflow Task completed
+                    </span>
+                  </div>
                 </motion.div>
               )}
             </div>
-          </div>
+          </motion.div>
 
           {/* Center Divider — hidden on mobile */}
           <div className="hidden lg:block w-px bg-slide-border relative">
-            {/* Floating Callout */}
+            {/* Activity arrow connector */}
             <AnimatePresence>
-              {showCallout && (
+              {highlightedActivity && isPlaying && !isReplaying && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  key={highlightedActivity}
+                  initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-primary/30 shadow-xl"
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center gap-1"
                 >
-                  <h4 className="font-semibold text-primary mb-2 text-center">Deterministic Replay</h4>
-                  <ul className="text-xs text-muted-foreground space-y-1">
-                    <li>Re-executes workflow code</li>
-                    <li>Past results come from Event History</li>
-                    <li>Only new decisions append new events</li>
-                  </ul>
+                  <motion.div
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-temporal-green/20 border border-temporal-green/40 shadow-[0_0_12px_rgba(34,197,94,0.3)]"
+                    animate={{ x: [0, 3, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <ArrowRight className="w-3.5 h-3.5 text-temporal-green" />
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Replay arrow connector (reversed — history feeds code) */}
+            <AnimatePresence>
+              {isReplayScanning && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center gap-1"
+                >
+                  <motion.div
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-temporal-blue/20 border border-temporal-blue/40 shadow-[0_0_12px_rgba(59,130,246,0.3)]"
+                    animate={{ x: [0, -3, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <ArrowRight className="w-3.5 h-3.5 text-temporal-blue rotate-180" />
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Narrative pills */}
+            <AnimatePresence mode="wait">
+              {narrativeStep && (
+                <motion.div
+                  key={narrativeStep}
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute top-[62%] left-1/2 -translate-x-1/2 z-20 w-56 pointer-events-none"
+                >
+                  <div className={`px-3 py-2.5 rounded-xl border text-center text-xs leading-relaxed shadow-lg backdrop-blur-sm ${
+                    narrativeStep === "first-activity"
+                      ? "bg-temporal-green/10 border-temporal-green/30 text-temporal-green"
+                      : narrativeStep === "crash"
+                        ? "bg-destructive/10 border-destructive/30 text-destructive"
+                        : "bg-temporal-blue/10 border-temporal-blue/30 text-temporal-blue"
+                  }`}>
+                    {narrativeStep === "first-activity" && (
+                      <span>Every step is <strong>durably recorded</strong> — not in your DB, in Temporal</span>
+                    )}
+                    {narrativeStep === "crash" && (
+                      <span>Your code is gone, but the <strong>progress isn't</strong></span>
+                    )}
+                    {narrativeStep === "replay" && (
+                      <span>New worker re-executes code — past results come <strong>from history</strong></span>
+                    )}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {/* Mobile Replay Callout — shown inline on mobile only */}
-          <AnimatePresence>
-            {showCallout && (
+          {/* Mobile narrative pills — shown inline on mobile only */}
+          <AnimatePresence mode="wait">
+            {narrativeStep && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="lg:hidden p-3 rounded-xl bg-slide-surface border border-primary/30 shadow-xl"
+                key={`mobile-${narrativeStep}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className={`lg:hidden px-3 py-2.5 rounded-xl border text-center text-xs leading-relaxed ${
+                  narrativeStep === "first-activity"
+                    ? "bg-temporal-green/10 border-temporal-green/30 text-temporal-green"
+                    : narrativeStep === "crash"
+                      ? "bg-destructive/10 border-destructive/30 text-destructive"
+                      : "bg-temporal-blue/10 border-temporal-blue/30 text-temporal-blue"
+                }`}
               >
-                <h4 className="font-semibold text-primary mb-1 text-center text-sm">Deterministic Replay</h4>
-                <ul className="text-xs text-muted-foreground space-y-0.5">
-                  <li>Re-executes workflow code</li>
-                  <li>Past results come from Event History</li>
-                  <li>Only new decisions append new events</li>
-                </ul>
+                {narrativeStep === "first-activity" && (
+                  <span>Every step is <strong>durably recorded</strong> — not in your DB, in Temporal</span>
+                )}
+                {narrativeStep === "crash" && (
+                  <span>Your code is gone, but the <strong>progress isn't</strong></span>
+                )}
+                {narrativeStep === "replay" && (
+                  <span>New worker re-executes code — past results come <strong>from history</strong></span>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
 
           {/* Right Column - Events */}
-          <div className="w-full lg:w-[45%] flex flex-col min-h-[200px] sm:min-h-[250px] lg:min-h-0">
+          <motion.div
+            animate={{ opacity: isReplayScanning ? 0.4 : 1 }}
+            transition={{ duration: 0.5 }}
+            className="w-full lg:w-[45%] flex flex-col min-h-[200px] sm:min-h-[250px] lg:min-h-0"
+          >
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider">Temporal Cloud</span>
             </div>
@@ -642,7 +774,7 @@ export const EventHistorySlide = () => {
             </div>
 
             <div className="flex-1 rounded-xl bg-slide-surface border border-slide-border overflow-hidden">
-              <div className="h-full overflow-auto p-2 lg:p-3 space-y-1 lg:space-y-1.5">
+              <div ref={eventsScrollRef} className="h-full overflow-auto p-2 pb-4 lg:p-3 lg:pb-6 space-y-1 lg:space-y-1.5">
                 {visibleEvents.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-muted-foreground/50 text-sm italic">
                     Events will appear as execution progresses
@@ -774,7 +906,7 @@ export const EventHistorySlide = () => {
                 </motion.div>
               )}
             </div>
-          </div>
+          </motion.div>
         </div>
 
       </div>

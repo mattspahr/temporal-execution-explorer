@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, SkipForward, RotateCcw, CheckCircle2, ChevronRight, ChevronDown, Server } from "lucide-react";
+import { Play, Pause, SkipForward, RotateCcw, CheckCircle2, ChevronRight, ChevronDown, Server, ArrowRight } from "lucide-react";
 import {
   type SdkKey,
   type SdkDefinition,
@@ -225,10 +225,12 @@ export const ActivityRetriesSlide = () => {
   const [currentAttempt, setCurrentAttempt] = useState<number | null>(null);
   const [backoffSeconds, setBackoffSeconds] = useState(0);
   const [backoffCountdown, setBackoffCountdown] = useState(0);
-  const [showRetryCallout, setShowRetryCallout] = useState(false);
-  const [showSuccessCallout, setShowSuccessCallout] = useState(false);
   const [failedLineFlash, setFailedLineFlash] = useState(false);
   const [successLineFlash, setSuccessLineFlash] = useState(false);
+
+  const [narrativeStep, setNarrativeStep] = useState<string | null>(null);
+  const narrativeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const eventsScrollRef = useRef<HTMLDivElement>(null);
 
   const hasAutoPlayed = useRef(false);
   const backoffTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -251,8 +253,8 @@ export const ActivityRetriesSlide = () => {
     setCurrentAttempt(null);
     setBackoffSeconds(0);
     setBackoffCountdown(0);
-    setShowRetryCallout(false);
-    setShowSuccessCallout(false);
+    setNarrativeStep(null);
+    if (narrativeTimerRef.current) clearTimeout(narrativeTimerRef.current);
     setFailedLineFlash(false);
     setSuccessLineFlash(false);
     hasAutoPlayed.current = false;
@@ -300,9 +302,8 @@ export const ActivityRetriesSlide = () => {
         setIsPlaying(false);
         setCurrentAttempt(1);
         setFailedLineFlash(true);
-        setShowRetryCallout(true);
-        setBackoffSeconds(1);
-        if (!stepMode) startBackoffCountdown(1);
+        setBackoffSeconds(2);
+        if (!stepMode) startBackoffCountdown(2);
         return false;
       }
 
@@ -311,8 +312,8 @@ export const ActivityRetriesSlide = () => {
         setIsPlaying(false);
         setCurrentAttempt(2);
         setFailedLineFlash(true);
-        setBackoffSeconds(2);
-        if (!stepMode) startBackoffCountdown(2);
+        setBackoffSeconds(4);
+        if (!stepMode) startBackoffCountdown(4);
         return false;
       }
 
@@ -320,11 +321,8 @@ export const ActivityRetriesSlide = () => {
       if (nextDisplayIdx === SUCCESS_INDEX) {
         setCurrentAttempt(null);
         setSuccessLineFlash(true);
-        setShowRetryCallout(false);
-        setShowSuccessCallout(true);
         setTimeout(() => {
           setSuccessLineFlash(false);
-          setShowSuccessCallout(false);
         }, 2000);
       }
 
@@ -360,10 +358,48 @@ export const ActivityRetriesSlide = () => {
       if (!continued) {
         setIsPlaying(false);
       }
-    }, 800);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [isPlaying, addNextEvent]);
+
+  // Narrative pill helper
+  const showNarrative = useCallback((step: string, duration = 5000) => {
+    if (narrativeTimerRef.current) clearTimeout(narrativeTimerRef.current);
+    setNarrativeStep(step);
+    narrativeTimerRef.current = setTimeout(() => setNarrativeStep(null), duration);
+  }, []);
+
+  // Beat 1: First failure
+  useEffect(() => {
+    if (retryPaused && currentAttempt === 1) {
+      showNarrative("first-failure");
+    }
+  }, [retryPaused, currentAttempt, showNarrative]);
+
+  // Beat 2: Retry with backoff
+  useEffect(() => {
+    if (retryPaused && currentAttempt === 2) {
+      showNarrative("retry-backoff");
+    }
+  }, [retryPaused, currentAttempt, showNarrative]);
+
+  // Beat 3: Success
+  useEffect(() => {
+    if (successLineFlash) {
+      showNarrative("success-retry");
+    }
+  }, [successLineFlash, showNarrative]);
+
+  // Auto-scroll event history
+  useEffect(() => {
+    const el = eventsScrollRef.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      });
+    }
+  }, [visibleEvents]);
 
   const highlightedActivity = selectedEvent !== null ? allEvents[selectedEvent]?.activity || null : null;
   const visibleSet = new Set(visibleEvents);
@@ -517,7 +553,7 @@ export const ActivityRetriesSlide = () => {
         {/* Two Column Layout — stacks on mobile */}
         <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
           {/* Left Column - Code (55%) */}
-          <div className="w-full lg:w-[55%] flex flex-col min-h-[250px] sm:min-h-[300px] lg:min-h-0">
+          <motion.div animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="w-full lg:w-[55%] flex flex-col min-h-[250px] sm:min-h-[300px] lg:min-h-0">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
                 Workflow code
@@ -596,123 +632,95 @@ export const ActivityRetriesSlide = () => {
                 </code>
               </pre>
             </div>
-          </div>
+          </motion.div>
 
           {/* Center Divider — hidden on mobile */}
           <div className="hidden lg:block w-px bg-slide-border relative">
-            {/* Retry Policy Callout */}
+            {/* Activity arrow connector */}
             <AnimatePresence>
-              {showRetryCallout && (
+              {highlightedActivity && isPlaying && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  key={highlightedActivity}
+                  initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-64 p-4 rounded-xl bg-slide-surface border border-temporal-orange/30 shadow-xl"
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.2 }}
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex items-center gap-1"
                 >
-                  <h4 className="font-semibold text-temporal-orange mb-3 text-center text-sm">Retry Policy</h4>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">initialInterval</span>
-                      <span className="font-mono text-foreground">1s</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">backoffCoefficient</span>
-                      <span className="font-mono text-foreground">2</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">maximumAttempts</span>
-                      <span className="font-mono text-foreground">5</span>
-                    </div>
-                    <div className="mt-3 pt-2 border-t border-slide-border">
-                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                        <span>1s</span>
-                        <span className="text-foreground">&rarr;</span>
-                        <span>2s</span>
-                        <span className="text-foreground">&rarr;</span>
-                        <span>4s</span>
-                        <span className="text-foreground">&rarr;</span>
-                        <span>8s</span>
-                        <span className="text-foreground">&rarr;</span>
-                        <span>16s</span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground/60 mt-1 block">Exponential backoff schedule</span>
-                    </div>
-                  </div>
+                  <motion.div
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-temporal-green/20 border border-temporal-green/40 shadow-[0_0_12px_rgba(34,197,94,0.3)]"
+                    animate={{ x: [0, 3, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <ArrowRight className="w-3.5 h-3.5 text-temporal-green" />
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* Success Callout */}
-            <AnimatePresence>
-              {showSuccessCallout && (
+            {/* Narrative pills */}
+            <AnimatePresence mode="wait">
+              {narrativeStep && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-56 p-4 rounded-xl bg-slide-surface border border-temporal-green/30 shadow-xl"
+                  key={narrativeStep}
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                  transition={{ duration: 0.3 }}
+                  className="absolute top-[62%] left-1/2 -translate-x-1/2 z-20 w-56 pointer-events-none"
                 >
-                  <div className="flex items-center gap-2 justify-center">
-                    <CheckCircle2 className="w-5 h-5 text-temporal-green" />
-                    <h4 className="font-semibold text-temporal-green text-sm">Activity recovered!</h4>
+                  <div className={`px-3 py-2.5 rounded-xl border text-center text-xs leading-relaxed shadow-lg backdrop-blur-sm ${
+                    narrativeStep === "first-failure"
+                      ? "bg-destructive/10 border-destructive/30 text-destructive"
+                      : narrativeStep === "retry-backoff"
+                        ? "bg-temporal-orange/10 border-temporal-orange/30 text-temporal-orange"
+                        : "bg-temporal-green/10 border-temporal-green/30 text-temporal-green"
+                  }`}>
+                    {narrativeStep === "first-failure" && (
+                      <span>Activity failed — Temporal <strong>retries automatically</strong></span>
+                    )}
+                    {narrativeStep === "retry-backoff" && (
+                      <span>Backoff increases each retry — <strong>no code needed</strong></span>
+                    )}
+                    {narrativeStep === "success-retry" && (
+                      <span>Retry succeeded — workflow <strong>continues normally</strong></span>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                    chargeCard succeeded on attempt 3. Workflow continues.
-                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {/* Mobile Retry Policy Callout — shown inline on mobile only */}
-          <AnimatePresence>
-            {showRetryCallout && (
+          <AnimatePresence mode="wait">
+            {narrativeStep && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="lg:hidden p-3 rounded-xl bg-slide-surface border border-temporal-orange/30 shadow-xl"
+                key={`mobile-${narrativeStep}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className={`lg:hidden px-3 py-2.5 rounded-xl border text-center text-xs leading-relaxed ${
+                  narrativeStep === "first-failure"
+                    ? "bg-destructive/10 border-destructive/30 text-destructive"
+                    : narrativeStep === "retry-backoff"
+                      ? "bg-temporal-orange/10 border-temporal-orange/30 text-temporal-orange"
+                      : "bg-temporal-green/10 border-temporal-green/30 text-temporal-green"
+                }`}
               >
-                <h4 className="font-semibold text-temporal-orange mb-2 text-center text-sm">Retry Policy</h4>
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">initialInterval</span>
-                    <span className="font-mono text-foreground">1s</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">backoffCoefficient</span>
-                    <span className="font-mono text-foreground">2</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">maximumAttempts</span>
-                    <span className="font-mono text-foreground">5</span>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Mobile Success Callout — shown inline on mobile only */}
-          <AnimatePresence>
-            {showSuccessCallout && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="lg:hidden p-3 rounded-xl bg-slide-surface border border-temporal-green/30 shadow-xl"
-              >
-                <div className="flex items-center gap-2 justify-center">
-                  <CheckCircle2 className="w-4 h-4 text-temporal-green" />
-                  <h4 className="font-semibold text-temporal-green text-sm">Activity recovered!</h4>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">
-                  chargeCard succeeded on attempt 3. Workflow continues.
-                </p>
+                {narrativeStep === "first-failure" && (
+                  <span>Activity failed — Temporal <strong>retries automatically</strong></span>
+                )}
+                {narrativeStep === "retry-backoff" && (
+                  <span>Backoff increases each retry — <strong>no code needed</strong></span>
+                )}
+                {narrativeStep === "success-retry" && (
+                  <span>Retry succeeded — workflow <strong>continues normally</strong></span>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
 
           {/* Right Column - Events (45%) */}
-          <div className="w-full lg:w-[45%] flex flex-col min-h-[200px] sm:min-h-[250px] lg:min-h-0">
+          <motion.div animate={{ opacity: retryPaused ? 0.4 : 1 }} transition={{ duration: 0.5 }} className="w-full lg:w-[45%] flex flex-col min-h-[200px] sm:min-h-[250px] lg:min-h-0">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-muted-foreground/50 font-mono tracking-wider">Temporal Cloud</span>
             </div>
@@ -733,7 +741,7 @@ export const ActivityRetriesSlide = () => {
             </div>
 
             <div className="flex-1 rounded-xl bg-slide-surface border border-slide-border overflow-hidden">
-              <div className="h-full overflow-auto p-2 lg:p-3 space-y-1 lg:space-y-1.5">
+              <div ref={eventsScrollRef} className="h-full overflow-auto p-2 pb-4 lg:p-3 lg:pb-6 space-y-1 lg:space-y-1.5">
                 {visibleEvents.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-muted-foreground/50 text-sm italic">
                     Events will appear as execution progresses
@@ -916,7 +924,7 @@ export const ActivityRetriesSlide = () => {
                 )}
               </AnimatePresence>
             </div>
-          </div>
+          </motion.div>
         </div>
 
       </div>
