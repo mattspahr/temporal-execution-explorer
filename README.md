@@ -1,5 +1,9 @@
 # Temporal Execution Explorer
 
+### Live Demo
+
+[Temporal Execution Explorer](https://temporal-explorer.com/)
+
 An interactive visualization that demonstrates how Temporal handles worker crashes and recovers using deterministic replay. Built for presentations, demos, and educational content about Temporal's execution model.
 
 https://github.com/user-attachments/assets/d82304f5-c6b4-409c-82d3-dec8db941d43
